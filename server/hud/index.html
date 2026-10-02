@@ -505,7 +505,14 @@ function connect(){
     let e; try{e=JSON.parse(ev.data)}catch{return}
     if(e.type==="summon_panel"){ summonPanel(e); }
     else if(e.type==="dismiss_panels"){ dismissAllPanels(); }
-    else if(e.type==="partial_transcript"){ showLive(e.text); }
+    else if(e.type==="partial_transcript"){
+      if(e.text && e.text.trim()){
+        speechDetectedInTurn = true;
+        if(!speechStartTime) speechStartTime = Date.now();
+        consecutiveSilenceMs = 0;
+      }
+      showLive(e.text);
+    }
     else if(e.type==="transcript"){ clearLive(); if(e.text)addMsg("you",e.text); }
     else if(e.type==="run_started"){ currentRun=e.run_id; showStop(true); }
     else if(e.type==="approval_request"){ showApproval(e); }
@@ -515,7 +522,21 @@ function connect(){
       else if(e.state==="speaking")setState("speaking","SPEAKING","J.A.R.V.I.S IS SPEAKING...");
       else if(e.state==="stopped"){setState("standby","STANDBY");showStop(false);stopPlayback();addMsg("sys","run stopped")}
     }
-    else if(e.type==="error"){ clearLive(); addMsg("sys","error: "+e.message); setState("standby","STANDBY"); showStop(false); }
+    else if(e.type==="error"){
+      clearLive();
+      addMsg("sys","error: "+e.message);
+      setState("standby","STANDBY");
+      showStop(false);
+      serverTurnActive=false;
+      if(typeof handsFree!=="undefined" && handsFree && !capturing) startWakeListening();
+    }
+    else if(e.type==="status"){
+      if(e.message && (e.message.includes("cancelled") || e.message.includes("Run halted"))){
+        clearLive();
+        serverTurnActive=false;
+        if(!capturing && state!=="speaking") setState("standby","STANDBY");
+      }
+    }
     else if(e.type==="done"){
       currentRun=null; showStop(false);
       serverTurnActive=false;
@@ -634,8 +655,8 @@ function initWakeEngine(){
 
     recognition.onresult = (event) => {
       if(!handsFree || capturing) return;
-      // Cooldown: ignore wake results for 6s after last trigger (prevents chime/reply feedback)
-      if(Date.now() - wakeLastFiredAt < 6000) return;
+      // Cooldown: ignore wake results for 2s after last trigger (prevents chime/reply feedback)
+      if(Date.now() - wakeLastFiredAt < 2000) return;
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         const res = event.results[i];
         for (let j = 0; j < res.length; ++j) {
@@ -677,7 +698,7 @@ function initWakeEngine(){
       // AND at least 2s cooldown since last wake to prevent tight restart loops
       if(handsFree && !capturing && state !== "speaking"){
         const msSinceWake = Date.now() - wakeLastFiredAt;
-        const restartDelay = msSinceWake < 5000 ? (5000 - msSinceWake) : 500;
+        const restartDelay = msSinceWake < 2000 ? (2000 - msSinceWake) : 400;
         clearTimeout(wakeRestartTimer);
         wakeRestartTimer = setTimeout(() => {
           startWakeListening();
@@ -721,6 +742,10 @@ function stopWakeListening(){
 function toggleHandsFree(){
   handsFree = !handsFree;
   updateVoxUI();
+  if(capturing){
+    stopTalk("abort");
+  }
+  clearLive();
   if(handsFree){
     ensureCtx();
     addMsg("sys", 'Hands-Free mode ON. Say "Hey Jarvis" or "جارویس" to talk.');
@@ -797,18 +822,18 @@ async function initMic(){
       if(capturing && activeSources.length === 0){
         const now=Date.now();
         if(!speechDetectedInTurn){
-          if(level > 0.065){
+          if(level > 0.025){
             speechDetectedInTurn = true;
             speechStartTime = now;
             consecutiveSilenceMs = 0;
             if(handsFree) $("stateHint").textContent = "SPEAKING... (PAUSE TO SEND)";
           }
         } else {
-          if(level < 0.04){
+          if(level < 0.025){
             consecutiveSilenceMs += 80;
-            // 2.2 seconds of consecutive silence + at least 800ms of prior speech -> user finished sentence
-            if(consecutiveSilenceMs >= 2200 && (now - speechStartTime) >= 800){
-              console.log("Silence detected (2.2s) -> auto-submitting turn");
+            // 2.0 seconds of consecutive silence + at least 800ms of prior speech -> user finished sentence
+            if(consecutiveSilenceMs >= 2000 && (now - speechStartTime) >= 800){
+              console.log("Silence detected (2.0s) -> auto-submitting turn");
               playChime("send");
               stopTalk("silence");
             }
@@ -852,7 +877,7 @@ async function startTalk(isFollowUp=false){
   if(isFollowUp){
     setState("listening","FOLLOW-UP", "LISTENING · REPLY NOW OR PAUSE 6s TO SLEEP");
   } else {
-    setState("listening","LISTENING", handsFree ? "SPEAK NOW · PAUSE 2.2s TO SEND" : "CLICK AGAIN OR SPACE TO SEND");
+    setState("listening","LISTENING", handsFree ? "SPEAK NOW · PAUSE 2s TO SEND" : "CLICK AGAIN OR SPACE TO SEND");
   }
 
   // Hands-free timeout guard:
@@ -871,21 +896,20 @@ async function startTalk(isFollowUp=false){
 
 async function stopTalk(reason="manual"){
   if(!capturing) return;
-  // In hands-free mode: if VAD never detected real speech, abort silently instead of
-  // wasting a Groq STT call (prevents phantom empty turns from chime feedback / noise)
-  if(handsFree && reason !== "manual" && !speechDetectedInTurn){
-    capturing = false;
+  capturing=false;
+  $("talkBtn").textContent="ENGAGE VOICE"; $("micState").textContent="ready"; $("levelBar").style.width="0%";
+
+  if(reason === "abort" || (handsFree && reason !== "manual" && !speechDetectedInTurn)){
     serverTurnActive = false;
-    ws.send(JSON.stringify({type:"cancel"}));
-    $("talkBtn").textContent="ENGAGE VOICE"; $("micState").textContent="ready"; $("levelBar").style.width="0%";
-    console.log("Hands-free: no speech detected, aborting turn silently");
+    clearLive();
+    if(wsReady) ws.send(JSON.stringify({type:"cancel"}));
+    console.log(`Turn cancelled (${reason})`);
     setState("standby","STANDBY");
     setTimeout(() => { if(handsFree && !capturing) startWakeListening(); }, 500);
     return;
   }
-  capturing=false;
-  ws.send(JSON.stringify({type:"stop"}));
-  $("talkBtn").textContent="ENGAGE VOICE"; $("micState").textContent="ready"; $("levelBar").style.width="0%";
+  serverTurnActive = true;
+  if(wsReady) ws.send(JSON.stringify({type:"stop"}));
   setState("thinking","PROCESSING");
 }
 

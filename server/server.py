@@ -1448,6 +1448,8 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                         await ws.send_json({"type": "error", "message": "Received stop before start."})
                         continue
                     conn.recording = False
+                    if conn.partial_task and not conn.partial_task.done():
+                        conn.partial_task.cancel()
                     conn.timing.end_of_speech_monotonic = time.perf_counter()
                     conn.turn_task = asyncio.create_task(_run_turn(ws, pipeline, conn))
                 elif etype == "stop_run":
@@ -1456,6 +1458,8 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                 elif etype == "cancel":
                     # Client aborted the turn (e.g. hands-free no-speech detected) — discard audio
                     conn.recording = False
+                    if conn.partial_task and not conn.partial_task.done():
+                        conn.partial_task.cancel()
                     conn.audio_chunks = []
                     conn.timing = None
                     await ws.send_json({"type": "status", "message": "Turn cancelled (no speech)."})
@@ -1478,10 +1482,12 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                 if conn.recording:
                     conn.audio_chunks.append(message["bytes"])
                     _maybe_schedule_partial(ws, pipeline, conn)
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, Exception) as exc:
         if conn.turn_task and not conn.turn_task.done():
             conn.turn_task.cancel()
-        print("Client disconnected", flush=True)
+        if conn.partial_task and not conn.partial_task.done():
+            conn.partial_task.cancel()
+        print(f"Client disconnected ({type(exc).__name__})", flush=True)
     finally:
         WS_CLIENTS.discard(ws)
 
