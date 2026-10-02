@@ -208,6 +208,15 @@ class HermesAPI:
             return sid
         r = requests.post(f"{self.base}/api/sessions", headers=self.headers(),
                           json={"title": name}, timeout=15)
+        if r.status_code == 400 and "already in use" in r.text:
+            import re
+            m = re.search(r"session\s+([a-zA-Z0-9_\-]+)", r.text)
+            if m:
+                sid = m.group(1)
+                state[name] = sid
+                self._save_state(state)
+                print(f"Adopted existing Hermes session '{name}' -> {sid}", flush=True)
+                return sid
         r.raise_for_status()
         data = r.json()
         sid = (data.get("session") or data).get("id")
@@ -299,18 +308,25 @@ class VoicePipelineServer:
         self.turn_counter = 0
         self.hermes = HermesAPI(cfg)
         self.stt_lock = asyncio.Lock()
-        self.recorder = AudioToTextRecorder(
-            model=cfg["stt"]["model"],
-            use_microphone=False,
-            spinner=False,
-            device=cfg["stt"].get("device", "cpu"),
-            compute_type=cfg["stt"].get("compute_type", "int8"),
-            sample_rate=int(cfg["stt"].get("sample_rate", 16000)),
-            language="en",
-            beam_size=1,
-            faster_whisper_vad_filter=False,
-            no_log_file=True,
-        )
+        self._recorder = None
+
+    def _get_recorder(self) -> AudioToTextRecorder:
+        if self._recorder is None:
+            print("Initializing local RealtimeSTT Whisper...", flush=True)
+            self._recorder = AudioToTextRecorder(
+                model=self.cfg["stt"].get("model", "base"),
+                use_microphone=False,
+                spinner=False,
+                device=self.cfg["stt"].get("device", "cpu"),
+                compute_type=self.cfg["stt"].get("compute_type", "int8"),
+                sample_rate=int(self.cfg["stt"].get("sample_rate", 16000)),
+                language=self.cfg["stt"].get("language", ""),
+                beam_size=1,
+                faster_whisper_vad_filter=False,
+                no_log_file=True,
+            )
+            print("Local RealtimeSTT Whisper initialized.", flush=True)
+        return self._recorder
 
     def next_turn_id(self) -> int:
         self.turn_counter += 1
@@ -319,6 +335,16 @@ class VoicePipelineServer:
     async def transcribe(self, audio: bytes, timing: TurnTiming | None = None) -> str:
         if timing:
             timing.stt_start_monotonic = time.perf_counter()
+        # 0) Groq Whisper (ultra-fast cloud LPU, whisper-large-v3)
+        groq_cfg = self.cfg["stt"].get("groq") or {}
+        if self.cfg["stt"].get("provider") == "groq" or groq_cfg.get("enabled"):
+            text = await asyncio.to_thread(self._groq_stt, audio, groq_cfg)
+            if text is not None:
+                if timing:
+                    timing.stt_model = f"groq:{groq_cfg.get('model', 'whisper-large-v3')}"
+                    timing.stt_final_monotonic = time.perf_counter()
+                return text
+            print("Groq STT failed or unavailable, falling back to local STT", flush=True)
         # 1) GPU worker (if configured and reachable) — big model, ~0.3s
         remote = self.cfg["stt"].get("remote") or {}
         if remote.get("url"):
@@ -332,10 +358,11 @@ class VoicePipelineServer:
         sample_rate = int(self.cfg["stt"].get("sample_rate", 16000))
         samples = (np.frombuffer(audio, dtype=np.int16).astype(np.float32) / 32768.0).copy()
         try:
+            recorder = self._get_recorder()
             async with self.stt_lock:
-                self.recorder.feed_audio(samples, original_sample_rate=sample_rate)
-                text = await asyncio.to_thread(self.recorder.perform_final_transcription, samples, True)
-                self.recorder.clear_audio_queue()
+                recorder.feed_audio(samples, original_sample_rate=sample_rate)
+                text = await asyncio.to_thread(recorder.perform_final_transcription, samples, True)
+                recorder.clear_audio_queue()
         except Exception as exc:
             # near-silent audio can make whisper raise ("No clip timestamps found");
             # treat as empty transcript instead of failing the turn
@@ -344,6 +371,57 @@ class VoicePipelineServer:
         if timing:
             timing.stt_final_monotonic = time.perf_counter()
         return (text or "").strip()
+
+    def _groq_stt(self, audio: bytes, groq_cfg: dict) -> str | None:
+        """Transcribe raw PCM using Groq Whisper API (whisper-large-v3)."""
+        key = os.environ.get(groq_cfg.get("api_key_env", "GROQ_API_KEY"), "")
+        if not key:
+            return None
+        import io, wave
+        wav_buf = io.BytesIO()
+        try:
+            with wave.open(wav_buf, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(int(self.cfg["stt"].get("sample_rate", 16000)))
+                wf.writeframes(audio)
+            wav_bytes = wav_buf.getvalue()
+        except Exception as exc:
+            print(f"Groq STT wave format error: {exc}", flush=True)
+            return None
+
+        model = groq_cfg.get("model", "whisper-large-v3")
+        headers = {"Authorization": f"Bearer {key}"}
+        files = {"file": ("audio.wav", wav_bytes, "audio/wav")}
+        data = {"model": model}
+        lang = groq_cfg.get("language") or self.cfg["stt"].get("language")
+        if lang:
+            data["language"] = lang
+        prompt = groq_cfg.get("prompt")
+        if prompt:
+            data["prompt"] = prompt
+
+        proxies = {}
+        proxy = os.environ.get("ALL_PROXY") or os.environ.get("HTTPS_PROXY")
+        if proxy:
+            proxies = {"http": proxy, "https": proxy}
+
+        try:
+            r = requests.post(
+                "https://api.groq.com/openai/v1/audio/transcriptions",
+                headers=headers,
+                files=files,
+                data=data,
+                proxies=proxies,
+                timeout=float(groq_cfg.get("timeout", 8)),
+            )
+            if r.ok:
+                return (r.json().get("text") or "").strip()
+            print(f"Groq STT returned {r.status_code}: {r.text}", flush=True)
+        except Exception as exc:
+            print(f"Groq STT error: {exc}", flush=True)
+        return None
+
 
     def _remote_stt(self, audio: bytes, remote: dict) -> str | None:
         """POST raw PCM to the GPU STT worker. None = unavailable (use fallback)."""
@@ -434,33 +512,96 @@ class VoicePipelineServer:
 
     # ------------------------------------------------------------------ TTS
 
+    def _edge_tts_chunks_sync(self, text: str, timing: TurnTiming, voice: dict) -> Iterator[bytes]:
+        import edge_tts, subprocess
+        timing.tts_model = "edge-tts"
+        voice_id = voice.get("voice_id") or voice.get("edge_tts", {}).get("voice_id") or "fa-IR-FaridNeural"
+        timing.voice_id = voice_id
+        timing.tts_request_start_monotonic = timing.tts_request_start_monotonic or time.perf_counter()
+        record_usage(tts_chars=len(text))
+
+        cmd = [
+            "ffmpeg", "-hide_banner", "-loglevel", "error",
+            "-i", "pipe:0",
+            "-f", "s16le", "-ar", "16000", "-ac", "1",
+            "pipe:1"
+        ]
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+
+        def runner():
+            async def run():
+                comm = edge_tts.Communicate(text, voice_id)
+                async for chunk in comm.stream():
+                    if chunk["type"] == "audio":
+                        try:
+                            proc.stdin.write(chunk["data"])
+                        except Exception:
+                            break
+                try:
+                    proc.stdin.close()
+                except Exception:
+                    pass
+            asyncio.run(run())
+
+        t = threading.Thread(target=runner, daemon=True)
+        t.start()
+
+        try:
+            while True:
+                chunk = proc.stdout.read(4096)
+                if not chunk:
+                    break
+                if timing.first_tts_audio_byte_monotonic is None:
+                    timing.first_tts_audio_byte_monotonic = time.perf_counter()
+                yield chunk
+        finally:
+            proc.wait()
+            t.join(timeout=2)
+
     def tts_chunks_sync(self, text: str, timing: TurnTiming) -> Iterator[bytes]:
         voice = self.cfg["voice"]
+        provider = voice.get("provider", "elevenlabs")
+
+        if provider == "edge_tts":
+            yield from self._edge_tts_chunks_sync(text, timing, voice)
+            return
+
         key = os.environ.get("ELEVENLABS_API_KEY") or os.environ.get("ELEVEN_API_KEY") or os.environ.get("XI_API_KEY")
         if not key:
             raise RuntimeError("ElevenLabs API key not found")
-        timing.tts_model = voice["model"]
+        timing.tts_model = voice.get("model", "eleven_multilingual_v2")
         timing.voice_id = voice["voice_id"]
         timing.tts_request_start_monotonic = timing.tts_request_start_monotonic or time.perf_counter()
         record_usage(tts_chars=len(text))
         url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice['voice_id']}/stream"
         params = {"output_format": voice.get("output_format", "pcm_16000")}
+        settings = voice.get("voice_settings") or {
+            "stability": 0.75, "similarity_boost": 0.85,
+            "style": 0.0, "use_speaker_boost": True,
+        }
         payload = {
             "text": text,
-            "model_id": voice["model"],
-            "voice_settings": {
-                "stability": 0.55, "similarity_boost": 0.70,
-                "style": 0.10, "use_speaker_boost": True,
-            },
+            "model_id": voice.get("model", "eleven_multilingual_v2"),
+            "voice_settings": settings,
         }
+        proxies = {}
+        proxy = os.environ.get("ALL_PROXY") or os.environ.get("HTTPS_PROXY")
+        if proxy:
+            proxies = {"http": proxy, "https": proxy}
+
         response = requests.post(
             url, params=params,
             headers={"xi-api-key": key, "Accept": "application/octet-stream", "Content-Type": "application/json"},
-            json=payload, stream=True, timeout=120,
+            json=payload, proxies=proxies, stream=True, timeout=120,
         )
         if response.status_code >= 400:
+            err_text = response.text[:1000]
             response.close()
-            raise RuntimeError(f"ElevenLabs HTTP {response.status_code}: {response.text[:1000]}")
+            if "paid_plan_required" in err_text or "payment_required" in err_text:
+                print("ElevenLabs library voice requires paid plan. Falling back to native Persian Edge-TTS (fa-IR-FaridNeural)...", flush=True)
+                yield from self._edge_tts_chunks_sync(text, timing, {"voice_id": "fa-IR-FaridNeural"})
+                return
+            raise RuntimeError(f"ElevenLabs HTTP {response.status_code}: {err_text}")
         try:
             for chunk in response.iter_content(chunk_size=4096):
                 if not chunk:

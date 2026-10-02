@@ -307,10 +307,10 @@ footer{
   <!-- RIGHT COLUMN -->
   <div class="col">
     <div class="panel"><h2><span>MODELS LOADOUT</span><span class="num">06</span></h2>
-      <div class="kv"><span>Brain</span><b>hermes-agent</b></div>
-      <div class="kv"><span>STT</span><b>whisper base.en</b></div>
-      <div class="kv"><span>TTS</span><b>ElevenLabs Flash v2.5</b></div>
-      <div class="kv"><span>Fallback</span><b>claude-haiku-4-5</b></div>
+      <div class="kv"><span>Brain</span><b>hermes (9Router mine)</b></div>
+      <div class="kv"><span>STT</span><b id="mLoadoutStt">groq:whisper-large-v3</b></div>
+      <div class="kv"><span>TTS</span><b id="mLoadoutTts">Edge-TTS (fa-IR-Farid)</b></div>
+      <div class="kv"><span>Fallback</span><b>eleven_multilingual_v2</b></div>
       <div style="border-top:1px solid var(--line); margin:6px 0 4px"></div>
       <div class="kv"><span>Tokens today</span><b id="uTok">—</b></div>
       <div class="kv" id="uCostRow" style="display:none"><span>Est. cost today</span><b id="uCost">—</b></div>
@@ -506,7 +506,8 @@ function connect(){
       const tm=e.timing||{};
       turns++; $("mTurns").textContent=turns;
       if(tm.end_of_speech_to_first_audio_seconds!=null)$("mFirst").textContent=tm.end_of_speech_to_first_audio_seconds+"s";
-      if(tm.total_turn_seconds!=null)$("mTotal").textContent=tm.total_turn_seconds+"s";
+      if(tm.stt_model && $("mLoadoutStt")) $("mLoadoutStt").textContent=tm.stt_model;
+      if(tm.tts_model && $("mLoadoutTts")) $("mLoadoutTts").textContent=tm.tts_model + (tm.voice_id ? " (" + tm.voice_id.split("-").slice(-1)[0] + ")" : "");
       $("mBrain").textContent=tm.llm_provider||"—";
       if(tm.response_text)addMsg("jarvis",tm.response_text);
       setTimeout(()=>{if(state!=="listening")setState("standby","STANDBY")},400);
