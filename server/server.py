@@ -869,15 +869,27 @@ class VoicePipelineServer:
     def _clean_for_tts(text: str) -> str:
         if not text:
             return ""
+        # Discard source / reference lines entirely
+        if re.search(r"^\s*(sources?|references?|منابع|منبع)\s*[:：]", text, re.IGNORECASE):
+            return ""
         text = THINK_RE.sub("", text)
         for pattern in SECRET_RES:                  # privacy: never speak secrets
             text = pattern.sub(" redacted ", text)
         text = CODEBLOCK_RE.sub(" code omitted. ", text)
+        # Strip trailing inline sources block if attached to a sentence
+        text = re.split(r"\b(sources?|references?|منابع|منبع)\s*[:：]", text, flags=re.IGNORECASE)[0]
+        # Strip URLs
+        text = re.sub(r"https?://\S+", "", text)
+        # Strip citation markers like [1], [2, 3], [1-4], 【1】
+        text = re.sub(r"\[\s*[\d,\s\-–—]+\s*\]", "", text)
+        text = re.sub(r"【\s*[\d,\s\-–—]+\s*】", "", text)
         text = re.sub(r"`([^`]*)`", r"\1", text)
         text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)
         text = re.sub(r"^[\s>*#-]+", "", text)
         text = re.sub(r"[*_#]{1,3}([^*_#]+)[*_#]{1,3}", r"\1", text)
         text = re.sub(r"\s+", " ", text).strip()
+        # Clean up whitespace before punctuation created by stripped citations
+        text = re.sub(r"\s+([.,!?;:،؛])", r"\1", text)
         return text
 
     def log_turn(self, timing: TurnTiming) -> None:
