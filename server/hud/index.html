@@ -615,6 +615,8 @@ function playChime(type="wake"){
   }catch(e){}
 }
 
+let wakeLastFiredAt = 0;  // timestamp of last wake trigger — used to enforce cooldown
+
 function initWakeEngine(){
   const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SpeechRec){
@@ -630,6 +632,8 @@ function initWakeEngine(){
 
     recognition.onresult = (event) => {
       if(!handsFree || capturing) return;
+      // Cooldown: ignore wake results for 6s after last trigger (prevents chime/reply feedback)
+      if(Date.now() - wakeLastFiredAt < 6000) return;
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         const res = event.results[i];
         for (let j = 0; j < res.length; ++j) {
@@ -642,6 +646,7 @@ function initWakeEngine(){
             phrase.includes("hi jarvis")
           ) {
             console.log("Wake word triggered:", phrase);
+            wakeLastFiredAt = Date.now();
             stopWakeListening();
             playChime("wake");
             setState("listening", "WAKE DETECTED!", "START TALKING NOW...");
@@ -666,11 +671,15 @@ function initWakeEngine(){
 
     recognition.onend = () => {
       wakeActive = false;
+      // Only restart if: handsFree still on, not actively capturing, not speaking,
+      // AND at least 2s cooldown since last wake to prevent tight restart loops
       if(handsFree && !capturing && state !== "speaking"){
+        const msSinceWake = Date.now() - wakeLastFiredAt;
+        const restartDelay = msSinceWake < 5000 ? (5000 - msSinceWake) : 500;
         clearTimeout(wakeRestartTimer);
         wakeRestartTimer = setTimeout(() => {
           startWakeListening();
-        }, 350);
+        }, restartDelay);
       }
     };
     return true;
@@ -837,10 +846,31 @@ async function startTalk(){
   capturing=true;
   $("talkBtn").textContent="■ STOP & SEND"; $("micState").textContent="LIVE";
   setState("listening","LISTENING", handsFree ? "SPEAK NOW · PAUSE 2.2s TO SEND" : "CLICK AGAIN OR SPACE TO SEND");
+
+  // Hands-free: if no speech detected within 8s, abort the turn and re-arm wake word
+  if(handsFree){
+    setTimeout(() => {
+      if(capturing && !speechDetectedInTurn){
+        console.log("Hands-free: no speech in 8s, aborting and re-arming wake word");
+        stopTalk("timeout-no-speech");
+      }
+    }, 8000);
+  }
 }
 
 async function stopTalk(reason="manual"){
   if(!capturing) return;
+  // In hands-free mode: if VAD never detected real speech, abort silently instead of
+  // wasting a Groq STT call (prevents phantom empty turns from chime feedback / noise)
+  if(handsFree && reason !== "manual" && !speechDetectedInTurn){
+    capturing = false;
+    ws.send(JSON.stringify({type:"cancel"}));
+    $("talkBtn").textContent="ENGAGE VOICE"; $("micState").textContent="ready"; $("levelBar").style.width="0%";
+    console.log("Hands-free: no speech detected, aborting turn silently");
+    setState("standby","STANDBY");
+    setTimeout(() => { if(handsFree && !capturing) startWakeListening(); }, 500);
+    return;
+  }
   capturing=false;
   ws.send(JSON.stringify({type:"stop"}));
   $("talkBtn").textContent="ENGAGE VOICE"; $("micState").textContent="ready"; $("levelBar").style.width="0%";

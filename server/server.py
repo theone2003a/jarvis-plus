@@ -1334,6 +1334,12 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                 elif etype == "stop_run":
                     await _cancel_active_turn(ws, pipeline, conn)
                     await ws.send_json({"type": "agent_status", "state": "stopped"})
+                elif etype == "cancel":
+                    # Client aborted the turn (e.g. hands-free no-speech detected) — discard audio
+                    conn.recording = False
+                    conn.audio_chunks = []
+                    conn.timing = None
+                    await ws.send_json({"type": "status", "message": "Turn cancelled (no speech)."})
                 elif etype == "approval_decision":
                     run_id = event.get("run_id") or conn.current_run_id
                     if not run_id:
