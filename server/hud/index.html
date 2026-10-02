@@ -268,9 +268,9 @@ footer{
         <button class="btn danger" id="stopBtn">■ STOP</button>
       </div>
       <div style="margin-top:6px; display:flex; gap:6px">
-        <button class="btn" id="voxBtn" style="flex:1" title="Hands-Free Mode: Say 'Hey Jarvis' or 'جارویس' to talk. Pauses auto-send. [Shortcut: H]">⚡ HANDS-FREE: OFF</button>
+        <button class="btn vox-active" id="voxBtn" style="flex:1" title="Hands-Free Mode: Say 'Hey Jarvis' or 'جارویس' to talk. Pauses auto-send. [Shortcut: H]">⚡ HANDS-FREE: ON</button>
       </div>
-      <div class="kv" id="voxStatusRow" style="margin-top:5px; font-size:11px; opacity:0.85; display:none">
+      <div class="kv" id="voxStatusRow" style="margin-top:5px; font-size:11px; opacity:0.85; display:flex">
         <span>Wake word</span><b id="voxWakeLabel" style="color:var(--cyan)">"Hey Jarvis" / "جارویس"</b>
       </div>
     </div>
@@ -603,7 +603,7 @@ function stopPlayback(){ activeSources.forEach(s=>{try{s.stop()}catch{}}); activ
 
 /* ============================== Wake Word & Hands-Free ============= */
 let recognition = null;
-let handsFree = false;
+let handsFree = true;
 let wakeRestartTimer = null;
 let wakeActive = false;
 
@@ -1192,7 +1192,22 @@ addEventListener("keydown",e=>{
 });
 bootSequence(new URLSearchParams(location.search).get("boot")==="full");
 
-addMsg("sys","Jarvis HUD online. Click the ring or press Space to talk.");
+const unlockAudioAndWake = () => {
+  ensureCtx();
+  if(handsFree && !capturing && state !== "speaking") {
+    startWakeListening();
+  }
+};
+document.addEventListener("click", unlockAudioAndWake, { once: true });
+document.addEventListener("keydown", unlockAudioAndWake, { once: true });
+
+if(handsFree){
+  updateVoxUI();
+  startWakeListening();
+  addMsg("sys", 'Jarvis HUD online. Hands-Free mode ON — say "Hey Jarvis" or "جارویس" to talk.');
+} else {
+  addMsg("sys", "Jarvis HUD online. Click the ring or press Space to talk.");
+}
 </script>
 </body>
 </html>
