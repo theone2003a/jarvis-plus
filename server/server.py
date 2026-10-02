@@ -335,11 +335,34 @@ class VoicePipelineServer:
     async def transcribe(self, audio: bytes, timing: TurnTiming | None = None) -> str:
         if timing:
             timing.stt_start_monotonic = time.perf_counter()
+
+        # Reject near-silent audio (RMS energy check) to prevent hallucinations
+        if len(audio) >= 320:
+            samples_i16 = np.frombuffer(audio, dtype=np.int16)
+            rms = float(np.sqrt(np.mean(samples_i16.astype(np.float64)**2)))
+            if rms < 150.0:
+                if timing:
+                    timing.stt_final_monotonic = time.perf_counter()
+                return ""
+
+        def _filter_hallucinations(t: str) -> str:
+            t = (t or "").strip()
+            # Discard Whisper prompt echoes or known hallucinations on low SNR
+            triggers = [
+                "گفتگوی دوستانه", "در این گفتگو", "محاوره‌ای به زبان فارسی",
+                "استفاده می‌کنید", "استفاده میکنید", "شعر بخونیم", "باهمدیگه",
+            ]
+            if any(trig in t for trig in triggers) and len(t) < 90:
+                print(f"STT: Discarded Whisper prompt hallucination: '{t}'", flush=True)
+                return ""
+            return t
+
         # 0) Groq Whisper (ultra-fast cloud LPU, whisper-large-v3)
         groq_cfg = self.cfg["stt"].get("groq") or {}
         if self.cfg["stt"].get("provider") == "groq" or groq_cfg.get("enabled"):
             text = await asyncio.to_thread(self._groq_stt, audio, groq_cfg)
             if text is not None:
+                text = _filter_hallucinations(text)
                 if timing:
                     timing.stt_model = f"groq:{groq_cfg.get('model', 'whisper-large-v3')}"
                     timing.stt_final_monotonic = time.perf_counter()
@@ -350,6 +373,7 @@ class VoicePipelineServer:
         if remote.get("url"):
             text = await asyncio.to_thread(self._remote_stt, audio, remote)
             if text is not None:
+                text = _filter_hallucinations(text)
                 if timing:
                     timing.stt_model = f"remote:{remote.get('name', 'gpu')}"
                     timing.stt_final_monotonic = time.perf_counter()
@@ -368,6 +392,7 @@ class VoicePipelineServer:
             # treat as empty transcript instead of failing the turn
             print(f"local STT error treated as empty transcript: {exc}", flush=True)
             text = ""
+        text = _filter_hallucinations(text)
         if timing:
             timing.stt_final_monotonic = time.perf_counter()
         return (text or "").strip()
@@ -393,7 +418,7 @@ class VoicePipelineServer:
         model = groq_cfg.get("model", "whisper-large-v3")
         headers = {"Authorization": f"Bearer {key}"}
         files = {"file": ("audio.wav", wav_bytes, "audio/wav")}
-        data = {"model": model}
+        data = {"model": model, "temperature": 0.0}
         lang = groq_cfg.get("language") or self.cfg["stt"].get("language")
         if lang:
             data["language"] = lang
