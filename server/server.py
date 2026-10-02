@@ -575,9 +575,108 @@ class VoicePipelineServer:
             proc.wait()
             t.join(timeout=2)
 
+    def _gemini_tts_chunks_sync(self, text: str, timing: TurnTiming, voice: dict) -> Iterator[bytes]:
+        import requests, base64, subprocess
+        key = (
+            os.environ.get("GEMINI_API_KEY")
+            or os.environ.get("GOOGLE_API_KEY")
+        )
+        if not key:
+            print("Gemini API key not found. Falling back to native Persian Edge-TTS...", flush=True)
+            yield from self._edge_tts_chunks_sync(text, timing, {"voice_id": "fa-IR-FaridNeural"})
+            return
+
+        gemini_cfg = voice.get("gemini") or {}
+        preferred_model = gemini_cfg.get("model", "gemini-3.8-flash-tts")
+        voice_name = gemini_cfg.get("voice_name", "Kore")
+        timing.tts_model = f"gemini:{preferred_model}"
+        timing.voice_id = voice_name
+        timing.tts_request_start_monotonic = timing.tts_request_start_monotonic or time.perf_counter()
+        record_usage(tts_chars=len(text))
+
+        models_to_try = [preferred_model]
+        if preferred_model != "gemini-3.8-flash-tts":
+            models_to_try.append("gemini-3.8-flash-tts")
+        if preferred_model != "gemini-2.5-flash-preview-tts":
+            models_to_try.append("gemini-2.5-flash-preview-tts")
+
+        prompt_text = (
+            "Speak in natural, fluent Persian with clear pronunciation and natural pacing. "
+            f"Please read this exact text out loud:\n{text}"
+        )
+        payload = {
+            "contents": [{"parts": [{"text": prompt_text}]}],
+            "generationConfig": {
+                "responseModalities": ["AUDIO"],
+                "speechConfig": {
+                    "voiceConfig": {
+                        "prebuiltVoiceConfig": {
+                            "voiceName": voice_name
+                        }
+                    }
+                }
+            }
+        }
+
+        proxies = {}
+        proxy = os.environ.get("ALL_PROXY") or os.environ.get("HTTPS_PROXY")
+        if proxy:
+            proxies = {"http": proxy, "https": proxy}
+
+        pcm_24k: bytes | None = None
+        for m in models_to_try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={key}"
+            try:
+                r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, proxies=proxies, timeout=25)
+                if r.ok:
+                    res = r.json()
+                    candidates = res.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        for p in parts:
+                            if "inlineData" in p and p["inlineData"].get("data"):
+                                pcm_24k = base64.b64decode(p["inlineData"]["data"])
+                                timing.tts_model = f"gemini:{m}"
+                                break
+                    if pcm_24k:
+                        break
+                print(f"Gemini TTS ({m}) returned {r.status_code}: {r.text[:200]}", flush=True)
+            except Exception as exc:
+                print(f"Gemini TTS ({m}) error: {exc}", flush=True)
+
+        if not pcm_24k:
+            print("Gemini TTS unavailable or quota exceeded. Falling back to native Persian Edge-TTS...", flush=True)
+            yield from self._edge_tts_chunks_sync(text, timing, {"voice_id": "fa-IR-FaridNeural"})
+            return
+
+        cmd = [
+            "ffmpeg", "-hide_banner", "-loglevel", "error",
+            "-f", "s16le", "-ar", "24000", "-ac", "1", "-i", "pipe:0",
+            "-f", "s16le", "-ar", "16000", "-ac", "1", "pipe:1"
+        ]
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        try:
+            proc.stdin.write(pcm_24k)
+            proc.stdin.close()
+        except Exception:
+            pass
+
+        while True:
+            chunk = proc.stdout.read(4096)
+            if not chunk:
+                break
+            if timing.first_tts_audio_byte_monotonic is None:
+                timing.first_tts_audio_byte_monotonic = time.perf_counter()
+            yield chunk
+        proc.wait()
+
     def tts_chunks_sync(self, text: str, timing: TurnTiming) -> Iterator[bytes]:
         voice = self.cfg["voice"]
         provider = voice.get("provider", "elevenlabs")
+
+        if provider in ("gemini", "gemini_tts", "google"):
+            yield from self._gemini_tts_chunks_sync(text, timing, voice)
+            return
 
         if provider == "edge_tts":
             yield from self._edge_tts_chunks_sync(text, timing, voice)
