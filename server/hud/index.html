@@ -569,11 +569,17 @@ function playChunk(buf){
   audioArrived=true;
 }
 function onPlaybackEnded(){
-  if(state==="speaking"){
-    setState("standby","STANDBY");
-  }
   if(handsFree && !capturing){
-    startWakeListening();
+    // Continuous Conversation: automatically stay listening for the user's follow-up reply!
+    // Brief 400ms delay to let room speaker reverberations clear.
+    setTimeout(()=>{
+      if(handsFree && !capturing && state!=="speaking"){
+        console.log("Continuous Conversation: listening for user follow-up...");
+        startTalk(true);
+      }
+    }, 400);
+  } else if(state==="speaking"){
+    setState("standby","STANDBY");
   }
 }
 function stopPlayback(){ activeSources.forEach(s=>{try{s.stop()}catch{}}); activeSources=[]; playhead=0; }
@@ -831,7 +837,7 @@ let speechStartTime = 0;
 let consecutiveSilenceMs = 0;
 let turnStartTime = 0;
 
-async function startTalk(){
+async function startTalk(isFollowUp=false){
   if(!wsReady){addMsg("sys","voice server offline");return}
   stopWakeListening();
   try{await initMic()}catch(err){addMsg("sys","mic blocked: "+err.message);return}
@@ -845,16 +851,24 @@ async function startTalk(){
   ws.send(JSON.stringify({type:"start",sample_rate:16000,format:"pcm_s16le",channels:1,conversation:CONV}));
   capturing=true;
   $("talkBtn").textContent="■ STOP & SEND"; $("micState").textContent="LIVE";
-  setState("listening","LISTENING", handsFree ? "SPEAK NOW · PAUSE 2.2s TO SEND" : "CLICK AGAIN OR SPACE TO SEND");
+  
+  if(isFollowUp){
+    setState("listening","FOLLOW-UP", "LISTENING · REPLY NOW OR PAUSE 6s TO SLEEP");
+  } else {
+    setState("listening","LISTENING", handsFree ? "SPEAK NOW · PAUSE 2.2s TO SEND" : "CLICK AGAIN OR SPACE TO SEND");
+  }
 
-  // Hands-free: if no speech detected within 8s, abort the turn and re-arm wake word
+  // Hands-free timeout guard:
+  // In follow-up mode: wait 6.5s for user to start speaking; if no speech, sleep silently.
+  // In initial wake mode: wait 8s for user to start speaking.
   if(handsFree){
+    const maxWaitMs = isFollowUp ? 6500 : 8000;
     setTimeout(() => {
       if(capturing && !speechDetectedInTurn){
-        console.log("Hands-free: no speech in 8s, aborting and re-arming wake word");
+        console.log(`Hands-free: no speech in ${maxWaitMs/1000}s, ending follow-up`);
         stopTalk("timeout-no-speech");
       }
-    }, 8000);
+    }, maxWaitMs);
   }
 }
 
