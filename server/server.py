@@ -651,7 +651,7 @@ class VoicePipelineServer:
 
         cmd = [
             "ffmpeg", "-hide_banner", "-loglevel", "error",
-            "-f", "s16le", "-ar", "24000", "-ac", "1", "-i", "pipe:0",
+            "-i", "pipe:0",
             "-f", "s16le", "-ar", "16000", "-ac", "1", "pipe:1"
         ]
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
