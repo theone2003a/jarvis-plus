@@ -782,7 +782,8 @@ async function initMic(){
       if(capturing)$("levelBar").style.width=(level*100).toFixed(0)+"%";
 
       // Silence & Voice Activity Detection (VAD)
-      if(capturing){
+      // Skip VAD entirely while J.A.R.V.I.S is playing audio (prevents TTS feedback loops / false barge-ins)
+      if(capturing && activeSources.length === 0){
         const now=Date.now();
         if(!speechDetectedInTurn){
           if(level > 0.065){
@@ -794,9 +795,9 @@ async function initMic(){
         } else {
           if(level < 0.04){
             consecutiveSilenceMs += 80;
-            // 1.4 seconds of consecutive silence -> user finished sentence!
-            if(consecutiveSilenceMs >= 1400 && (now - speechStartTime) >= 350){
-              console.log("Silence detected (1.4s) -> auto-submitting turn");
+            // 2.2 seconds of consecutive silence + at least 800ms of prior speech -> user finished sentence
+            if(consecutiveSilenceMs >= 2200 && (now - speechStartTime) >= 800){
+              console.log("Silence detected (2.2s) -> auto-submitting turn");
               playChime("send");
               stopTalk("silence");
             }
@@ -835,7 +836,7 @@ async function startTalk(){
   ws.send(JSON.stringify({type:"start",sample_rate:16000,format:"pcm_s16le",channels:1,conversation:CONV}));
   capturing=true;
   $("talkBtn").textContent="■ STOP & SEND"; $("micState").textContent="LIVE";
-  setState("listening","LISTENING", handsFree ? "SPEAK NOW · PAUSE 1.4s TO SEND" : "CLICK AGAIN OR SPACE TO SEND");
+  setState("listening","LISTENING", handsFree ? "SPEAK NOW · PAUSE 2.2s TO SEND" : "CLICK AGAIN OR SPACE TO SEND");
 }
 
 async function stopTalk(reason="manual"){

@@ -405,21 +405,36 @@ class VoicePipelineServer:
         proxy = os.environ.get("ALL_PROXY") or os.environ.get("HTTPS_PROXY")
         if proxy:
             proxies = {"http": proxy, "https": proxy}
-
-        try:
-            r = requests.post(
-                "https://api.groq.com/openai/v1/audio/transcriptions",
-                headers=headers,
-                files=files,
-                data=data,
-                proxies=proxies,
-                timeout=float(groq_cfg.get("timeout", 8)),
-            )
-            if r.ok:
-                return (r.json().get("text") or "").strip()
-            print(f"Groq STT returned {r.status_code}: {r.text}", flush=True)
-        except Exception as exc:
-            print(f"Groq STT error: {exc}", flush=True)
+        # On 429 retry with the alternate model (large-v3 ↔ turbo) after waiting retry-after seconds.
+        retry_models = [model, "whisper-large-v3-turbo" if model == "whisper-large-v3" else "whisper-large-v3"]
+        timeout = float(groq_cfg.get("timeout", 8))
+        for attempt_model in retry_models:
+            data["model"] = attempt_model
+            files_attempt = {"file": ("audio.wav", wav_bytes, "audio/wav")}
+            try:
+                r = requests.post(
+                    "https://api.groq.com/openai/v1/audio/transcriptions",
+                    headers=headers,
+                    files=files_attempt,
+                    data=data,
+                    proxies=proxies,
+                    timeout=timeout,
+                )
+                if r.ok:
+                    if attempt_model != model:
+                        print(f"Groq STT: used fallback model {attempt_model}", flush=True)
+                    return (r.json().get("text") or "").strip()
+                if r.status_code == 429:
+                    wait = min(float(r.headers.get("retry-after", "3")), 6.0)
+                    print(f"Groq STT 429 on {attempt_model}, waiting {wait}s then trying next model...", flush=True)
+                    import time as _time; _time.sleep(wait)
+                    continue
+                print(f"Groq STT returned {r.status_code}: {r.text}", flush=True)
+                return None
+            except Exception as exc:
+                print(f"Groq STT error: {exc}", flush=True)
+                return None
+        print("Groq STT: all models rate-limited, falling back to local STT", flush=True)
         return None
 
 
@@ -515,7 +530,9 @@ class VoicePipelineServer:
     def _edge_tts_chunks_sync(self, text: str, timing: TurnTiming, voice: dict) -> Iterator[bytes]:
         import edge_tts, subprocess
         timing.tts_model = "edge-tts"
-        voice_id = voice.get("voice_id") or voice.get("edge_tts", {}).get("voice_id") or "fa-IR-FaridNeural"
+        # Always use the edge_tts-specific voice id. Never use the top-level voice_id
+        # (that is the ElevenLabs voice id which is an invalid Edge-TTS voice name).
+        voice_id = voice.get("edge_tts", {}).get("voice_id") or "fa-IR-FaridNeural"
         timing.voice_id = voice_id
         timing.tts_request_start_monotonic = timing.tts_request_start_monotonic or time.perf_counter()
         record_usage(tts_chars=len(text))
