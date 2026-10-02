@@ -587,18 +587,23 @@ class VoicePipelineServer:
             return
 
         gemini_cfg = voice.get("gemini") or {}
-        preferred_model = gemini_cfg.get("model", "gemini-3.8-flash-tts")
+        preferred_model = gemini_cfg.get("model", "gemini-3.8-flash-lite-tts")
         voice_name = gemini_cfg.get("voice_name", "Kore")
         timing.tts_model = f"gemini:{preferred_model}"
         timing.voice_id = voice_name
         timing.tts_request_start_monotonic = timing.tts_request_start_monotonic or time.perf_counter()
         record_usage(tts_chars=len(text))
 
-        models_to_try = [preferred_model]
-        if preferred_model != "gemini-3.8-flash-tts":
-            models_to_try.append("gemini-3.8-flash-tts")
-        if preferred_model != "gemini-2.5-flash-preview-tts":
-            models_to_try.append("gemini-2.5-flash-preview-tts")
+        # Model pool with fallback in case one hits quota/rate limits
+        models_to_try = [
+            preferred_model,
+            "gemini-3.8-flash-lite-tts",
+            "gemini-3.1-flash-tts-preview",
+            "gemini-3.8-flash-tts",
+            "gemini-2.5-flash-preview-tts"
+        ]
+        # Deduplicate while preserving order
+        models_to_try = list(dict.fromkeys(models_to_try))
 
         prompt_text = (
             "Speak in natural, fluent Persian with clear pronunciation and natural pacing. "
@@ -623,11 +628,11 @@ class VoicePipelineServer:
         if proxy:
             proxies = {"http": proxy, "https": proxy}
 
-        pcm_24k: bytes | None = None
+        audio_bytes: bytes | None = None
         for m in models_to_try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={key}"
             try:
-                r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, proxies=proxies, timeout=25)
+                r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, proxies=proxies, timeout=20)
                 if r.ok:
                     res = r.json()
                     candidates = res.get("candidates", [])
@@ -635,40 +640,46 @@ class VoicePipelineServer:
                         parts = candidates[0].get("content", {}).get("parts", [])
                         for p in parts:
                             if "inlineData" in p and p["inlineData"].get("data"):
-                                pcm_24k = base64.b64decode(p["inlineData"]["data"])
+                                audio_bytes = base64.b64decode(p["inlineData"]["data"])
                                 timing.tts_model = f"gemini:{m}"
                                 break
-                    if pcm_24k:
+                    if audio_bytes:
                         break
                 print(f"Gemini TTS ({m}) returned {r.status_code}: {r.text[:200]}", flush=True)
             except Exception as exc:
                 print(f"Gemini TTS ({m}) error: {exc}", flush=True)
 
-        if not pcm_24k:
+        if not audio_bytes:
             print("Gemini TTS unavailable or quota exceeded. Falling back to native Persian Edge-TTS...", flush=True)
             yield from self._edge_tts_chunks_sync(text, timing, {"voice_id": "fa-IR-FaridNeural"})
             return
 
-        cmd = [
-            "ffmpeg", "-hide_banner", "-loglevel", "error",
-            "-i", "pipe:0",
-            "-f", "s16le", "-ar", "16000", "-ac", "1", "pipe:1"
-        ]
-        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-        try:
-            proc.stdin.write(pcm_24k)
-            proc.stdin.close()
-        except Exception:
-            pass
+        # Handle containerized WAV vs raw PCM dynamically
+        if audio_bytes.startswith(b"RIFF"):
+            cmd = [
+                "ffmpeg", "-hide_banner", "-loglevel", "error",
+                "-i", "pipe:0",
+                "-f", "s16le", "-ar", "16000", "-ac", "1", "pipe:1"
+            ]
+        else:
+            cmd = [
+                "ffmpeg", "-hide_banner", "-loglevel", "error",
+                "-f", "s16le", "-ar", "24000", "-ac", "1", "-i", "pipe:0",
+                "-f", "s16le", "-ar", "16000", "-ac", "1", "pipe:1"
+            ]
 
-        while True:
-            chunk = proc.stdout.read(4096)
-            if not chunk:
-                break
+        proc = subprocess.run(cmd, input=audio_bytes, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        pcm_16k = proc.stdout
+        if proc.returncode != 0 or not pcm_16k:
+            print(f"FFmpeg conversion error: {proc.stderr.decode()[:200]}. Falling back to Edge-TTS...", flush=True)
+            yield from self._edge_tts_chunks_sync(text, timing, {"voice_id": "fa-IR-FaridNeural"})
+            return
+
+        for i in range(0, len(pcm_16k), 4096):
+            chunk = pcm_16k[i:i + 4096]
             if timing.first_tts_audio_byte_monotonic is None:
                 timing.first_tts_audio_byte_monotonic = time.perf_counter()
             yield chunk
-        proc.wait()
 
     def tts_chunks_sync(self, text: str, timing: TurnTiming) -> Iterator[bytes]:
         voice = self.cfg["voice"]
