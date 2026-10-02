@@ -371,7 +371,7 @@ footer{
 const CONV = "jarvis-main";
 let ws=null, wsReady=false, capturing=false, state="standby";
 let audioCtx=null, workletNode=null, mediaStream=null, srcNode=null;
-let playhead=0, activeSources=[], leftoverByte=null, audioArrived=false;
+let playhead=0, activeSources=[], leftoverByte=null, audioArrived=false, serverTurnActive=false;
 let level=0, turns=0;
 
 const $=id=>document.getElementById(id);
@@ -512,12 +512,13 @@ function connect(){
     else if(e.type==="agent_status"){
       if(e.state==="thinking"){setState("thinking","PROCESSING");showStop(true)}
       else if(e.state==="tool_use"){setState("tool","WORKING");addActivity("",e.tool||"tool",e.preview)}
-      else if(e.state==="speaking")setState("speaking","SPEAKING");
+      else if(e.state==="speaking")setState("speaking","SPEAKING","J.A.R.V.I.S IS SPEAKING...");
       else if(e.state==="stopped"){setState("standby","STANDBY");showStop(false);stopPlayback();addMsg("sys","run stopped")}
     }
     else if(e.type==="error"){ clearLive(); addMsg("sys","error: "+e.message); setState("standby","STANDBY"); showStop(false); }
     else if(e.type==="done"){
       currentRun=null; showStop(false);
+      serverTurnActive=false;
       const tm=e.timing||{};
       turns++; $("mTurns").textContent=turns;
       if(tm.end_of_speech_to_first_audio_seconds!=null)$("mFirst").textContent=tm.end_of_speech_to_first_audio_seconds+"s";
@@ -525,13 +526,8 @@ function connect(){
       if(tm.tts_model && $("mLoadoutTts")) $("mLoadoutTts").textContent=tm.tts_model + (tm.voice_id ? " (" + tm.voice_id.split("-").slice(-1)[0] + ")" : "");
       $("mBrain").textContent=tm.llm_provider||"—";
       if(tm.response_text)addMsg("jarvis",tm.response_text);
-      if(activeSources.length===0 && !audioArrived){
-        setTimeout(()=>{
-          if(state!=="listening"){
-            setState("standby","STANDBY");
-            if(handsFree && !capturing) startWakeListening();
-          }
-        },500);
+      if(activeSources.length===0){
+        onPlaybackEnded();
       }
     }
   };
@@ -562,23 +558,23 @@ function playChunk(buf){
   activeSources.push(src);
   src.onended=()=>{
     activeSources=activeSources.filter(x=>x!==src);
-    if(activeSources.length===0){
+    if(!serverTurnActive && activeSources.length===0){
       onPlaybackEnded();
     }
   };
   audioArrived=true;
 }
 function onPlaybackEnded(){
-  if(handsFree && !capturing){
+  if(capturing) return;
+  if(handsFree){
     // Continuous Conversation: automatically stay listening for the user's follow-up reply!
-    // Brief 400ms delay to let room speaker reverberations clear.
     setTimeout(()=>{
-      if(handsFree && !capturing && state!=="speaking"){
+      if(handsFree && !capturing){
         console.log("Continuous Conversation: listening for user follow-up...");
         startTalk(true);
       }
-    }, 400);
-  } else if(state==="speaking"){
+    }, 450);
+  } else {
     setState("standby","STANDBY");
   }
 }
@@ -850,6 +846,7 @@ async function startTalk(isFollowUp=false){
 
   ws.send(JSON.stringify({type:"start",sample_rate:16000,format:"pcm_s16le",channels:1,conversation:CONV}));
   capturing=true;
+  serverTurnActive=true;
   $("talkBtn").textContent="■ STOP & SEND"; $("micState").textContent="LIVE";
   
   if(isFollowUp){
@@ -878,6 +875,7 @@ async function stopTalk(reason="manual"){
   // wasting a Groq STT call (prevents phantom empty turns from chime feedback / noise)
   if(handsFree && reason !== "manual" && !speechDetectedInTurn){
     capturing = false;
+    serverTurnActive = false;
     ws.send(JSON.stringify({type:"cancel"}));
     $("talkBtn").textContent="ENGAGE VOICE"; $("micState").textContent="ready"; $("levelBar").style.width="0%";
     console.log("Hands-free: no speech detected, aborting turn silently");
