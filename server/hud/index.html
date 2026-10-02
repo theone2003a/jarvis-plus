@@ -83,6 +83,7 @@ button.btn:hover{background:#0e3349; box-shadow:0 0 10px #00e5ff44}
 button.btn.danger{color:var(--red); border-color:#7a2a33; background:#240a0e}
 button.btn.danger:hover{background:#3a0e15; box-shadow:0 0 10px #ff4d5e55}
 button.btn.amber{color:var(--amber); border-color:#7a5a1a; background:#241c0a}
+button.btn.vox-active{color:#00ffff; border-color:#00e5ff; background:#0b3b52; box-shadow:0 0 14px #00e5ff66}
 #stopBtn{display:none}
 #approvals{position:absolute; top:8px; left:50%; transform:translateX(-50%); z-index:20; width:min(560px,92%); display:flex; flex-direction:column; gap:8px}
 .appr{border:1px solid var(--amber); background:#1a1305f2; padding:12px 14px;
@@ -266,6 +267,12 @@ footer{
         <button class="btn" id="talkBtn" style="flex:1">ENGAGE VOICE</button>
         <button class="btn danger" id="stopBtn">■ STOP</button>
       </div>
+      <div style="margin-top:6px; display:flex; gap:6px">
+        <button class="btn" id="voxBtn" style="flex:1" title="Hands-Free Mode: Say 'Hey Jarvis' or 'جارویس' to talk. Pauses auto-send. [Shortcut: H]">⚡ HANDS-FREE: OFF</button>
+      </div>
+      <div class="kv" id="voxStatusRow" style="margin-top:5px; font-size:11px; opacity:0.85; display:none">
+        <span>Wake word</span><b id="voxWakeLabel" style="color:var(--cyan)">"Hey Jarvis" / "جارویس"</b>
+      </div>
     </div>
     <div class="panel"><h2><span>AGENT ACTIVITY</span><span class="num">02</span></h2>
       <div id="activity"><div>— no activity yet —</div></div>
@@ -428,7 +435,11 @@ requestAnimationFrame(frame);
 function setState(st,label,hint){
   state=st;
   $("stateLabel").textContent=label;
-  if(hint!==undefined)$("stateHint").textContent=hint;
+  if(hint!==undefined){
+    $("stateHint").textContent=hint;
+  } else if(st==="standby"){
+    $("stateHint").textContent=(typeof handsFree!=="undefined" && handsFree)?'SAY "HEY JARVIS" OR "جارویس"':'CLICK RING OR SPACE TO TALK';
+  }
 }
 
 /* ============================== feed =============================== */
@@ -458,8 +469,12 @@ function clearLive(){ if(liveEl){liveEl.remove(); liveEl=null;} }
 function showStop(on){ $("stopBtn").style.display=on?"block":"none"; }
 function stopRun(){
   stopPlayback();
+  clearLive();
+  if(typeof capturing!=="undefined" && capturing) stopTalk("abort");
   if(wsReady)ws.send(JSON.stringify({type:"stop_run"}));
   showStop(false);
+  setState("standby","STANDBY");
+  if(typeof handsFree!=="undefined" && handsFree && !capturing) startWakeListening();
 }
 
 /* approval cards */
@@ -510,7 +525,14 @@ function connect(){
       if(tm.tts_model && $("mLoadoutTts")) $("mLoadoutTts").textContent=tm.tts_model + (tm.voice_id ? " (" + tm.voice_id.split("-").slice(-1)[0] + ")" : "");
       $("mBrain").textContent=tm.llm_provider||"—";
       if(tm.response_text)addMsg("jarvis",tm.response_text);
-      setTimeout(()=>{if(state!=="listening")setState("standby","STANDBY")},400);
+      if(activeSources.length===0 && !audioArrived){
+        setTimeout(()=>{
+          if(state!=="listening"){
+            setState("standby","STANDBY");
+            if(handsFree && !capturing) startWakeListening();
+          }
+        },500);
+      }
     }
   };
 }
@@ -537,10 +559,182 @@ function playChunk(buf){
   const src=audioCtx.createBufferSource(); src.buffer=ab; src.connect(audioCtx.destination);
   const t=Math.max(audioCtx.currentTime+0.06,playhead);
   src.start(t); playhead=t+ab.duration;
-  activeSources.push(src); src.onended=()=>{activeSources=activeSources.filter(x=>x!==src)};
+  activeSources.push(src);
+  src.onended=()=>{
+    activeSources=activeSources.filter(x=>x!==src);
+    if(activeSources.length===0){
+      onPlaybackEnded();
+    }
+  };
   audioArrived=true;
 }
+function onPlaybackEnded(){
+  if(state==="speaking"){
+    setState("standby","STANDBY");
+  }
+  if(handsFree && !capturing){
+    startWakeListening();
+  }
+}
 function stopPlayback(){ activeSources.forEach(s=>{try{s.stop()}catch{}}); activeSources=[]; playhead=0; }
+
+/* ============================== Wake Word & Hands-Free ============= */
+let recognition = null;
+let handsFree = false;
+let wakeRestartTimer = null;
+let wakeActive = false;
+
+function playChime(type="wake"){
+  try{
+    ensureCtx();
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    if(type === "wake"){
+      // Sci-fi two-tone chime: 587Hz -> 880Hz
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(587.33, now);
+      osc.frequency.exponentialRampToValueAtTime(880.00, now + 0.12);
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(0.25, now + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+      osc.start(now);
+      osc.stop(now + 0.3);
+    } else if(type === "send"){
+      // Soft audio send tone: 880Hz -> 659Hz
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880.00, now);
+      osc.frequency.exponentialRampToValueAtTime(659.25, now + 0.09);
+      gain.gain.setValueAtTime(0.14, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+      osc.start(now);
+      osc.stop(now + 0.18);
+    }
+  }catch(e){}
+}
+
+function initWakeEngine(){
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SpeechRec){
+    console.warn("SpeechRecognition API not available in this browser");
+    return false;
+  }
+  if(recognition) return true;
+  try{
+    recognition = new SpeechRec();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 3;
+
+    recognition.onresult = (event) => {
+      if(!handsFree || capturing) return;
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const res = event.results[i];
+        for (let j = 0; j < res.length; ++j) {
+          const phrase = (res[j].transcript || "").toLowerCase().trim();
+          if (
+            phrase.includes("jarvis") ||
+            phrase.includes("جارویس") ||
+            phrase.includes("هی جارویس") ||
+            phrase.includes("hey jarvis") ||
+            phrase.includes("hi jarvis")
+          ) {
+            console.log("Wake word triggered:", phrase);
+            stopWakeListening();
+            playChime("wake");
+            setState("listening", "WAKE DETECTED!", "START TALKING NOW...");
+            setTimeout(() => {
+              if(!capturing) startTalk();
+            }, 80);
+            return;
+          }
+        }
+      }
+    };
+
+    recognition.onerror = (event) => {
+      if(event.error === "no-speech") return;
+      console.warn("Wake speech error:", event.error);
+      if(event.error === "not-allowed" || event.error === "service-not-allowed"){
+        handsFree = false;
+        updateVoxUI();
+        addMsg("sys", "Microphone permission required for Hands-Free mode");
+      }
+    };
+
+    recognition.onend = () => {
+      wakeActive = false;
+      if(handsFree && !capturing && state !== "speaking"){
+        clearTimeout(wakeRestartTimer);
+        wakeRestartTimer = setTimeout(() => {
+          startWakeListening();
+        }, 350);
+      }
+    };
+    return true;
+  }catch(err){
+    console.warn("Wake init error:", err);
+    return false;
+  }
+}
+
+function startWakeListening(){
+  if(!handsFree || capturing || state === "speaking") return;
+  if(!recognition){
+    if(!initWakeEngine()) return;
+  }
+  if(!wakeActive){
+    try{
+      recognition.start();
+      wakeActive = true;
+      $("voxWakeLabel").textContent = "LISTENING FOR WAKE WORD";
+      $("voxWakeLabel").style.color = "var(--teal)";
+    }catch(e){
+      wakeActive = false;
+    }
+  }
+}
+
+function stopWakeListening(){
+  clearTimeout(wakeRestartTimer);
+  wakeActive = false;
+  if(recognition){
+    try{ recognition.stop(); }catch(e){}
+  }
+  $("voxWakeLabel").textContent = '"Hey Jarvis" / "جارویس"';
+  $("voxWakeLabel").style.color = "var(--cyan)";
+}
+
+function toggleHandsFree(){
+  handsFree = !handsFree;
+  updateVoxUI();
+  if(handsFree){
+    ensureCtx();
+    addMsg("sys", 'Hands-Free mode ON. Say "Hey Jarvis" or "جارویس" to talk.');
+    startWakeListening();
+    if(state === "standby") setState("standby", "STANDBY");
+  } else {
+    stopWakeListening();
+    addMsg("sys", "Hands-Free mode OFF (Push-to-Talk active).");
+    if(state === "standby") setState("standby", "STANDBY");
+  }
+}
+
+function updateVoxUI(){
+  const btn = $("voxBtn");
+  const row = $("voxStatusRow");
+  if(handsFree){
+    btn.className = "btn vox-active";
+    btn.textContent = "⚡ HANDS-FREE: ON";
+    row.style.display = "flex";
+  } else {
+    btn.className = "btn";
+    btn.textContent = "⚡ HANDS-FREE: OFF";
+    row.style.display = "none";
+  }
+}
 
 /* ============================== audio in =========================== */
 const workletCode=`
@@ -586,6 +780,35 @@ async function initMic(){
       for(let i=0;i<a.length;i+=8)s+=Math.abs(a[i]);
       level=Math.min(1,(s/(a.length/8))/9000);
       if(capturing)$("levelBar").style.width=(level*100).toFixed(0)+"%";
+
+      // Silence & Voice Activity Detection (VAD)
+      if(capturing){
+        const now=Date.now();
+        if(!speechDetectedInTurn){
+          if(level > 0.065){
+            speechDetectedInTurn = true;
+            speechStartTime = now;
+            consecutiveSilenceMs = 0;
+            if(handsFree) $("stateHint").textContent = "SPEAKING... (PAUSE TO SEND)";
+          }
+        } else {
+          if(level < 0.04){
+            consecutiveSilenceMs += 80;
+            // 1.4 seconds of consecutive silence -> user finished sentence!
+            if(consecutiveSilenceMs >= 1400 && (now - speechStartTime) >= 350){
+              console.log("Silence detected (1.4s) -> auto-submitting turn");
+              playChime("send");
+              stopTalk("silence");
+            }
+          } else {
+            consecutiveSilenceMs = 0;
+          }
+        }
+        // Safety guard: max 28 seconds of continuous recording
+        if(now - turnStartTime > 28000){
+          stopTalk("timeout");
+        }
+      }
     };
     srcNode.connect(workletNode);
   }
@@ -593,26 +816,47 @@ async function initMic(){
 }
 
 /* ============================== talk flow ========================== */
-async function toggleTalk(){
+let speechDetectedInTurn = false;
+let speechStartTime = 0;
+let consecutiveSilenceMs = 0;
+let turnStartTime = 0;
+
+async function startTalk(){
   if(!wsReady){addMsg("sys","voice server offline");return}
-  if(capturing){ // stop talking
-    capturing=false;
-    ws.send(JSON.stringify({type:"stop"}));
-    $("talkBtn").textContent="ENGAGE VOICE"; $("micState").textContent="ready"; $("levelBar").style.width="0%";
-    setState("thinking","PROCESSING");
-    return;
-  }
+  stopWakeListening();
   try{await initMic()}catch(err){addMsg("sys","mic blocked: "+err.message);return}
   stopPlayback();                       // barge-in
   audioArrived=false;
+  speechDetectedInTurn = false;
+  speechStartTime = 0;
+  consecutiveSilenceMs = 0;
+  turnStartTime = Date.now();
+
   ws.send(JSON.stringify({type:"start",sample_rate:16000,format:"pcm_s16le",channels:1,conversation:CONV}));
   capturing=true;
   $("talkBtn").textContent="■ STOP & SEND"; $("micState").textContent="LIVE";
-  setState("listening","LISTENING","CLICK AGAIN TO SEND");
+  setState("listening","LISTENING", handsFree ? "SPEAK NOW · PAUSE 1.4s TO SEND" : "CLICK AGAIN OR SPACE TO SEND");
+}
+
+async function stopTalk(reason="manual"){
+  if(!capturing) return;
+  capturing=false;
+  ws.send(JSON.stringify({type:"stop"}));
+  $("talkBtn").textContent="ENGAGE VOICE"; $("micState").textContent="ready"; $("levelBar").style.width="0%";
+  setState("thinking","PROCESSING");
+}
+
+async function toggleTalk(){
+  if(capturing){
+    stopTalk("manual");
+  } else {
+    startTalk();
+  }
 }
 $("talkBtn").onclick=toggleTalk;
 $("reactorWrap").onclick=toggleTalk;
 $("stopBtn").onclick=stopRun;
+$("voxBtn").onclick=toggleHandsFree;
 
 /* ---- pop-up viewer ---- */
 const DASH_PROXY=`https://${location.hostname}:9443`;
@@ -636,6 +880,7 @@ addEventListener("keydown",e=>{
 });
 addEventListener("keydown",e=>{
   if(e.code==="Space"&&document.activeElement!==$("chatInput")){e.preventDefault();toggleTalk()}
+  if((e.code==="KeyH"||e.key==="h"||e.key==="H")&&document.activeElement!==$("chatInput")){e.preventDefault();toggleHandsFree()}
 });
 
 /* ============================== typed chat ========================= */
