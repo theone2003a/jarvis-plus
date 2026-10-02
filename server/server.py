@@ -605,12 +605,9 @@ class VoicePipelineServer:
         # Deduplicate while preserving order
         models_to_try = list(dict.fromkeys(models_to_try))
 
-        prompt_text = (
-            "Speak in natural, fluent Persian with clear pronunciation and natural pacing. "
-            f"Please read this exact text out loud:\n{text}"
-        )
+        clean_text = text.strip()
         payload = {
-            "contents": [{"parts": [{"text": prompt_text}]}],
+            "contents": [{"parts": [{"text": clean_text}]}],
             "generationConfig": {
                 "responseModalities": ["AUDIO"],
                 "speechConfig": {
