@@ -14,6 +14,8 @@
 <link rel="stylesheet" href="templates/aetheria/aetheria.css">
 <link rel="stylesheet" href="templates/ironcore/ironcore.css">
 <link rel="stylesheet" href="templates/zenith/zenith.css">
+<link rel="stylesheet" href="templates/omni/omni.css">
+<link rel="stylesheet" href="templates/astra/astra.css">
 
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -126,6 +128,8 @@ html, body {
 <script src="templates/aetheria/aetheria.js"></script>
 <script src="templates/ironcore/ironcore.js"></script>
 <script src="templates/zenith/zenith.js"></script>
+<script src="templates/omni/omni.js"></script>
+<script src="templates/astra/astra.js"></script>
 
 <script>
 (async function() {
@@ -134,7 +138,9 @@ html, body {
   const TEMPLATES = {
     aetheria: window.AetheriaTemplate,
     ironcore: window.IronCoreTemplate,
-    zenith: window.ZenithTemplate
+    zenith: window.ZenithTemplate,
+    omni: window.OmniTemplate,
+    astra: window.AstraTemplate
   };
 
   let activeTemplateId = null;
@@ -199,6 +205,14 @@ html, body {
           <button class="tmpl-item ${activeTemplateId==='zenith'?'active':''}" data-id="zenith">
             <span>Zenith (Minimal Orb)</span>
             ${activeTemplateId==='zenith'?'✓':''}
+          </button>
+          <button class="tmpl-item ${activeTemplateId==='omni'?'active':''}" data-id="omni">
+            <span>Omni (ChatGPT Style)</span>
+            ${activeTemplateId==='omni'?'✓':''}
+          </button>
+          <button class="tmpl-item ${activeTemplateId==='astra'?'active':''}" data-id="astra">
+            <span>Astra (Gemini Style)</span>
+            ${activeTemplateId==='astra'?'✓':''}
           </button>
         </div>
       </div>

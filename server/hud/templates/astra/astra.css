@@ -1,0 +1,257 @@
+/* ==========================================================================
+   ASTRA TEMPLATE — Neural Waveform Live Assistant (Gemini Live Style)
+   ========================================================================== */
+
+:root {
+  --as-bg: #030816;
+  --as-surface: rgba(14, 25, 48, 0.75);
+  --as-border: rgba(66, 133, 244, 0.22);
+  --as-blue: #4285f4;
+  --as-purple: #a855f7;
+  --as-cyan: #00e5ff;
+  --as-red: #ea4335;
+  --as-txt: #f1f5f9;
+  --as-txt-dim: #94a3b8;
+}
+
+#astra-root {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  background-color: var(--as-bg);
+  background-image: 
+    radial-gradient(circle at 50% 45%, rgba(66, 133, 244, 0.14) 0%, transparent 65%),
+    radial-gradient(circle at 75% 20%, rgba(168, 85, 247, 0.12) 0%, transparent 50%),
+    radial-gradient(circle at 25% 75%, rgba(0, 229, 255, 0.08) 0%, transparent 50%);
+  color: var(--as-txt);
+  font-family: -apple-system, BlinkMacSystemFont, "Google Sans", "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ---------------- Top Bar ---------------- */
+.as-topbar {
+  width: 100%;
+  max-width: 900px;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  z-index: 20;
+}
+.as-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: #fff;
+}
+.as-sparkle {
+  color: var(--as-blue);
+  font-size: 16px;
+  filter: drop-shadow(0 0 8px var(--as-blue));
+}
+
+/* ---------------- Hero Voice Stage ---------------- */
+.as-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 100%;
+}
+
+.as-waveform-box {
+  position: relative;
+  width: min(44vh, 320px);
+  height: min(44vh, 320px);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.as-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.as-state-pill {
+  margin-top: 20px;
+  background: rgba(66, 133, 244, 0.12);
+  border: 1px solid var(--as-border);
+  border-radius: 24px;
+  padding: 6px 18px;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: #93c5fd;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.as-subtitle {
+  margin-top: 14px;
+  max-width: min(88vw, 580px);
+  min-height: 28px;
+  font-family: 'Vazirmatn', sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #fff;
+  text-align: center;
+  direction: rtl;
+  padding: 0 16px;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+}
+
+/* ---------------- Floating Bottom Control Dock ---------------- */
+.as-dock-wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 20px calc(16px + env(safe-area-inset-bottom));
+  z-index: 25;
+}
+
+.as-dock {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--as-surface);
+  border: 1px solid var(--as-border);
+  border-radius: 40px;
+  padding: 8px 18px;
+  backdrop-filter: blur(28px);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.5), 0 0 20px rgba(66, 133, 244, 0.15);
+}
+
+.as-mic-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--as-blue), var(--as-purple));
+  color: #fff;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 0 25px rgba(66, 133, 244, 0.6);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.as-mic-btn:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 35px rgba(66, 133, 244, 0.85);
+}
+.as-mic-btn.active {
+  background: linear-gradient(135deg, var(--as-cyan), var(--as-blue));
+  box-shadow: 0 0 35px rgba(0, 229, 255, 0.9);
+  animation: asMicPulse 1.3s infinite alternate;
+}
+@keyframes asMicPulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.1); }
+}
+
+.as-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--as-txt-dim);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 8px 14px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+.as-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+.as-btn.active {
+  color: #93c5fd;
+  background: rgba(66, 133, 244, 0.2);
+  border-color: rgba(66, 133, 244, 0.4);
+}
+.as-btn.danger {
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* Chat Sheet */
+.as-chat-sheet {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 8, 22, 0.96);
+  backdrop-filter: blur(28px);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(100%);
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 20px;
+}
+.as-chat-sheet.open {
+  transform: translateY(0);
+}
+.as-sheet-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--as-border);
+}
+.as-sheet-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 0;
+}
+.as-msg {
+  padding: 10px 16px;
+  border-radius: 18px;
+  font-size: 14.5px;
+  max-width: 82%;
+  line-height: 1.45;
+}
+.as-msg.you {
+  align-self: flex-end;
+  background: rgba(66, 133, 244, 0.3);
+  border: 1px solid rgba(66, 133, 244, 0.4);
+  color: #fff;
+}
+.as-msg.jarvis {
+  align-self: flex-start;
+  background: rgba(14, 25, 48, 0.85);
+  border: 1px solid var(--as-border);
+  color: #f1f5f9;
+}
+.as-sheet-input-row {
+  display: flex;
+  gap: 10px;
+}
+.as-sheet-inp {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--as-border);
+  border-radius: 24px;
+  padding: 10px 18px;
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+}

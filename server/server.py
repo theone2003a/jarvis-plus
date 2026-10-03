@@ -1244,6 +1244,8 @@ async def hud_config() -> JSONResponse:
             {"id": "aetheria", "name": "Aetheria (Female AI)"},
             {"id": "ironcore", "name": "IronCore (Tactical HUD)"},
             {"id": "zenith", "name": "Zenith (Minimal Orb)"},
+            {"id": "omni", "name": "Omni (ChatGPT Style)"},
+            {"id": "astra", "name": "Astra (Gemini Style)"},
         ])
     })
 

@@ -1,0 +1,246 @@
+/* ==========================================================================
+   OMNI TEMPLATE — Minimalist Voice Mode (ChatGPT Advanced Voice Style)
+   ========================================================================== */
+
+:root {
+  --om-bg: #0d0d0d;
+  --om-surface: #171717;
+  --om-border: rgba(255, 255, 255, 0.12);
+  --om-txt: #ececec;
+  --om-txt-dim: #8e8e93;
+  --om-white: #ffffff;
+  --om-blue: #3b82f6;
+  --om-red: #ef4444;
+}
+
+#omni-root {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  background-color: var(--om-bg);
+  color: var(--om-txt);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ---------------- Top Bar ---------------- */
+.om-topbar {
+  width: 100%;
+  max-width: 900px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  z-index: 20;
+}
+.om-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  color: var(--om-txt);
+}
+.om-brand-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10a37f;
+  box-shadow: 0 0 8px rgba(16, 163, 127, 0.6);
+}
+
+/* ---------------- Hero Voice Stage ---------------- */
+.om-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 100%;
+}
+
+.om-orb-box {
+  position: relative;
+  width: min(44vh, 300px);
+  height: min(44vh, 300px);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.om-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.om-state-pill {
+  margin-top: 24px;
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--om-txt-dim);
+  transition: all 0.3s ease;
+}
+
+.om-subtitle {
+  margin-top: 14px;
+  max-width: min(88vw, 580px);
+  min-height: 28px;
+  font-family: 'Vazirmatn', -apple-system, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--om-white);
+  text-align: center;
+  direction: rtl;
+  padding: 0 16px;
+}
+
+/* ---------------- Floating Bottom Control Dock ---------------- */
+.om-dock-wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 20px calc(16px + env(safe-area-inset-bottom));
+  z-index: 25;
+}
+
+.om-dock {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--om-surface);
+  border: 1px solid var(--om-border);
+  border-radius: 40px;
+  padding: 8px 18px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+
+.om-mic-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--om-white);
+  color: #000;
+  border: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 0 25px rgba(255, 255, 255, 0.4);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.om-mic-btn:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 35px rgba(255, 255, 255, 0.7);
+}
+.om-mic-btn.active {
+  background: #3b82f6;
+  color: #fff;
+  box-shadow: 0 0 30px rgba(59, 130, 246, 0.8);
+  animation: omMicPulse 1.4s infinite alternate;
+}
+@keyframes omMicPulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.09); }
+}
+
+.om-btn {
+  background: transparent;
+  border: 0;
+  color: var(--om-txt-dim);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+.om-btn:hover {
+  color: var(--om-white);
+  background: rgba(255, 255, 255, 0.08);
+}
+.om-btn.active {
+  color: #10a37f;
+  background: rgba(16, 163, 127, 0.15);
+}
+.om-btn.danger {
+  color: var(--om-red);
+}
+
+/* Chat Drawer Sheet */
+.om-chat-sheet {
+  position: fixed;
+  inset: 0;
+  background: rgba(13, 13, 13, 0.96);
+  backdrop-filter: blur(24px);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(100%);
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 20px;
+}
+.om-chat-sheet.open {
+  transform: translateY(0);
+}
+.om-sheet-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--om-border);
+}
+.om-sheet-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 0;
+}
+.om-msg {
+  padding: 10px 16px;
+  border-radius: 18px;
+  font-size: 14.5px;
+  max-width: 82%;
+  line-height: 1.45;
+}
+.om-msg.you {
+  align-self: flex-end;
+  background: #2f2f2f;
+  color: #fff;
+}
+.om-msg.jarvis {
+  align-self: flex-start;
+  background: transparent;
+  border: 1px solid var(--om-border);
+  color: #ececec;
+}
+.om-sheet-input-row {
+  display: flex;
+  gap: 10px;
+}
+.om-sheet-inp {
+  flex: 1;
+  background: #212121;
+  border: 1px solid var(--om-border);
+  border-radius: 24px;
+  padding: 10px 18px;
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+}
