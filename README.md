@@ -27,29 +27,21 @@ the rest is still being generated. Typical round trip: 3–5 seconds.
 
 The HUD around the ring is a real control center:
 
+- **5 Switchable HUD Templates** — switch with 1 click from the interface:
+  - **Aetheria** *(Default)*: Modern holographic female AI assistant with reactive orbital rings, floating dock, and slide-over System Inspector.
+  - **IronCore**: Tactical sci-fi Iron Man Arc Reactor with rotating mechanical power rings and telemetry array.
+  - **Zenith**: Siri / Apple Intelligence inspired fluid iridescent morphing color orb.
+  - **Omni**: ChatGPT Advanced Voice Mode style with organic deformable white/blue audio blob.
+  - **Astra**: Google Gemini Live style with shimmering multi-bar neural waveforms and Google starlight gradients.
+- **Hands-Free Mode** — wake words `"Hey Jarvis"` and `"جارویس"` with continuous follow-up conversation and 2.0s silence auto-send.
+- **Persian & English Native Support** — Groq Whisper Large V3 STT locked to `fa` and Google Gemini Flash Lite TTS (`Kore`) with Edge-TTS automatic fallback.
 - **Live agent activity** — watch tool calls happen with command previews
 - **STOP button** — halt a runaway agent turn mid-tool-call (Esc works too)
 - **Approval cards** — dangerous commands pause for your ALLOW/DENY
-- **Interrupt-aware barge-in** — cut it off mid-sentence; it knows exactly
-  what you heard and what you didn't
-- **Embedded dashboards** — Hermes' kanban board and session browser pop up
-  in animated viewers, fully interactive
-- **Holographic media panels** — say *"show me a video of how arc reactors
-  work, on screen"* and a panel swoops in from Z-depth, traces its frame,
-  materializes through a scanline, and plays the video. The agent drives it
-  through a bundled Hermes plugin (`hud_display`); panels can fly into
-  left/right thirds, and "clear the screen" sweeps them away
-- **Usage tracking** — tokens/day, turns, ElevenLabs quota bar
-- **Machines panel** — live CPU/GPU stats for the host and remote workers
-- **Cinematic boot** — press `B`: panels flicker in, ring spins up,
-  "Systems online. Good morning."
-- **Privacy filter** — secret-shaped strings are redacted before any text
-  reaches cloud TTS
-- **Optional GPU ears** — point it at any NVIDIA machine on your LAN running
-  the included sidecar and transcription jumps to `large-v3-turbo` at ~0.2 s,
-  with automatic fallback to local Whisper when that machine is off
-- **Mobile-ready** — responsive layout + Add to Home Screen = full-screen
-  Jarvis app on your phone
+- **Interrupt-aware barge-in** — cut it off mid-sentence; it knows exactly what you heard and what you didn't
+- **Embedded dashboards** — Hermes' kanban board and session browser pop up in animated viewers
+- **Holographic media panels** — fly-in panels from Z-depth with scanline sweeps
+- **Mobile-First Responsive** — `100dvh` layout, safe-area insets, thumb-reach floating dock, zero horizontal scroll.
 
 ## Architecture
 
