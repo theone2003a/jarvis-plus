@@ -199,6 +199,15 @@
         gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
         osc.start(now);
         osc.stop(now + 0.18);
+      } else if (type === "followup") {
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(523.25, now);
+        osc.frequency.exponentialRampToValueAtTime(659.25, now + 0.10);
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.linearRampToValueAtTime(0.08, now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.20);
+        osc.start(now);
+        osc.stop(now + 0.22);
       }
     } catch (e) {}
   }
@@ -245,6 +254,7 @@
           JarvisCore.speechDetectedInTurn = true;
           if (!JarvisCore.speechStartTime) JarvisCore.speechStartTime = Date.now();
           JarvisCore.consecutiveSilenceMs = 0;
+          JarvisCore.lastPartialTranscript = e.text.trim();
         }
         JarvisCore.emit("partial", e.text);
       } else if (e.type === "transcript") {
@@ -488,9 +498,14 @@ registerProcessor("pcm16k",PCM16K);`;
           } else {
             if (JarvisCore.level < 0.038) {
               JarvisCore.consecutiveSilenceMs += 80;
-              // 650ms silence detection: fast, natural conversational turn completion
-              if (JarvisCore.consecutiveSilenceMs >= 650 && (now - JarvisCore.speechStartTime) >= 450) {
-                console.log("Silence detected (650ms) -> auto-submitting turn");
+              // Dynamic silence threshold:
+              // 650ms for normal sentences (fast, crisp turn completion).
+              // Extended to 1100ms if user paused mid-sentence on conjunctions / fillers ("و", "یا", "که", "چون", "and", "or", etc.).
+              const txt = JarvisCore.lastPartialTranscript || "";
+              const isMidSentence = /(?:^|\s)(?:و|یا|که|چون|چونکه|اما|ولی|اگر|مثلاً|یعنی|and|or|because|but|so|if|like|um|uh)[\s,،]*$/i.test(txt);
+              const dynamicThreshold = isMidSentence ? 1100 : 650;
+              if (JarvisCore.consecutiveSilenceMs >= dynamicThreshold && (now - JarvisCore.speechStartTime) >= 450) {
+                console.log(`Silence detected (${dynamicThreshold}ms, midSentence=${isMidSentence}) -> auto-submitting turn`);
                 playChime("send");
                 JarvisCore.stopTalk("silence");
               }
@@ -523,6 +538,7 @@ registerProcessor("pcm16k",PCM16K);`;
     this.speechDetectedInTurn = false;
     this.speechStartTime = 0;
     this.consecutiveSilenceMs = 0;
+    this.lastPartialTranscript = "";
     this.turnStartTime = Date.now();
 
     ws.send(JSON.stringify({
@@ -538,6 +554,7 @@ registerProcessor("pcm16k",PCM16K);`;
     this.emit("capture_state", true);
 
     if (isFollowUp) {
+      playChime("followup");
       this.setState("listening", "FOLLOW-UP", "LISTENING · REPLY NOW OR PAUSE 6s TO SLEEP");
     } else {
       this.setState("listening", "LISTENING", this.handsFree ? "SPEAK NOW · PAUSE TO SEND" : "CLICK AGAIN OR SPACE TO SEND");
