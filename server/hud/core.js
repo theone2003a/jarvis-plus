@@ -51,6 +51,7 @@
       } else if (window.I18n) {
         if (st === "standby" && (label === "STANDBY")) resolvedLabel = t("standby", "STANDBY");
         else if (st === "listening" && (label === "LISTENING")) resolvedLabel = t("listening", "LISTENING");
+        else if (label === "FOLLOW-UP") resolvedLabel = t("follow_up", "FOLLOW-UP");
         else if (st === "thinking" && (label === "PROCESSING")) resolvedLabel = t("thinking", "PROCESSING");
         else if (st === "speaking" && (label === "SPEAKING")) resolvedLabel = t("speaking", "SPEAKING");
         else if (st === "tool" && (label === "WORKING")) resolvedLabel = t("working", "WORKING");
@@ -64,6 +65,8 @@
       let resolvedHint = hint !== undefined ? hint : defaultHint;
       if (resolvedHint === "J.A.R.V.I.S IS SPEAKING...") {
         resolvedHint = t("hint_speaking_jarvis", resolvedHint);
+      } else if (typeof resolvedHint === "string" && (resolvedHint.includes("FOLLOW-UP") || resolvedHint.includes("6s"))) {
+        resolvedHint = t("hint_follow_up", resolvedHint);
       } else if (typeof resolvedHint === "string" && resolvedHint.includes("PAUSE")) {
         resolvedHint = t("hint_speaking_pause", resolvedHint);
       }
@@ -139,14 +142,27 @@
 
   function onPlaybackEnded() {
     if (JarvisCore.capturing) return;
-    JarvisCore.setState("standby", "STANDBY");
     if (JarvisCore.handsFree) {
-      // Re-enable wake word listening after audio reverberation clears
+      if (JarvisCore.isFarewellTurn) {
+        JarvisCore.isFarewellTurn = false;
+        JarvisCore.setState("standby", "STANDBY");
+        setTimeout(() => {
+          if (JarvisCore.handsFree && !JarvisCore.capturing && JarvisCore.state === "standby") {
+            startWakeListening();
+          }
+        }, 600);
+        return;
+      }
+      // Continued Conversation (Follow-Up Mode):
+      // Wait 350ms for physical speaker reverberation in the room to clear,
+      // then seamlessly re-open the mic in follow-up mode for 6 seconds without needing wake word!
       setTimeout(() => {
-        if (JarvisCore.handsFree && !JarvisCore.capturing && JarvisCore.state === "standby") {
-          startWakeListening();
+        if (JarvisCore.handsFree && !JarvisCore.capturing && !JarvisCore.serverTurnActive) {
+          JarvisCore.startTalk(true);
         }
-      }, 600);
+      }, 350);
+    } else {
+      JarvisCore.setState("standby", "STANDBY");
     }
   }
 
@@ -233,6 +249,11 @@
         JarvisCore.emit("partial", e.text);
       } else if (e.type === "transcript") {
         JarvisCore.emit("transcript", { text: e.text, isUser: true });
+        if (e.text && /^(?:ممنون|مرسی|سپاسگزارم|خداحافظ|خدافظ|خسته نباشید|دستت درد نکنه|خداحافظی|bye|goodbye|thank you|thanks|quit|exit|stop)[\s\.\!؟]*$/i.test(e.text.trim())) {
+          JarvisCore.isFarewellTurn = true;
+        } else {
+          JarvisCore.isFarewellTurn = false;
+        }
       } else if (e.type === "run_started") {
         JarvisCore.currentRun = e.run_id;
         JarvisCore.emit("run_started", e.run_id);
@@ -465,10 +486,11 @@ registerProcessor("pcm16k",PCM16K);`;
               if (JarvisCore.handsFree) JarvisCore.setState("listening", "LISTENING", "SPEAKING... (PAUSE TO SEND)");
             }
           } else {
-            if (JarvisCore.level < 0.035) {
+            if (JarvisCore.level < 0.038) {
               JarvisCore.consecutiveSilenceMs += 80;
-              if (JarvisCore.consecutiveSilenceMs >= 2000 && (now - JarvisCore.speechStartTime) >= 800) {
-                console.log("Silence detected (2.0s) -> auto-submitting turn");
+              // 650ms silence detection: fast, natural conversational turn completion
+              if (JarvisCore.consecutiveSilenceMs >= 650 && (now - JarvisCore.speechStartTime) >= 450) {
+                console.log("Silence detected (650ms) -> auto-submitting turn");
                 playChime("send");
                 JarvisCore.stopTalk("silence");
               }
@@ -518,7 +540,7 @@ registerProcessor("pcm16k",PCM16K);`;
     if (isFollowUp) {
       this.setState("listening", "FOLLOW-UP", "LISTENING · REPLY NOW OR PAUSE 6s TO SLEEP");
     } else {
-      this.setState("listening", "LISTENING", this.handsFree ? "SPEAK NOW · PAUSE 2s TO SEND" : "CLICK AGAIN OR SPACE TO SEND");
+      this.setState("listening", "LISTENING", this.handsFree ? "SPEAK NOW · PAUSE TO SEND" : "CLICK AGAIN OR SPACE TO SEND");
     }
 
     if (this.handsFree) {
