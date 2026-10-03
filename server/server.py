@@ -1361,6 +1361,7 @@ class ConnState:
     partial_task: asyncio.Task | None = None
     last_partial_bytes: int = 0
     language: str | None = None
+    last_spoken_response: str = ""
 
 
 async def _run_turn(ws: WebSocket, pipeline: VoicePipelineServer, conn: ConnState) -> None:
@@ -1371,22 +1372,43 @@ async def _run_turn(ws: WebSocket, pipeline: VoicePipelineServer, conn: ConnStat
     try:
         transcript = await pipeline.transcribe(audio, timing, language=conn.language)
         timing.transcript = transcript
-        await ws.send_json({"type": "transcript", "text": transcript})
         if not transcript:
+            await ws.send_json({"type": "transcript", "text": ""})
             await ws.send_json({"type": "error", "message": "No transcript detected."})
+            return
+
+        # Acoustic Echo Rejection: If transcript echoes what Jarvis just spoke through speakers, discard it.
+        cleaned_transcript = re.sub(r"[^\w\s]", "", transcript).strip().lower()
+        cleaned_last = re.sub(r"[^\w\s]", "", conn.last_spoken_response).strip().lower()
+        if cleaned_last and cleaned_transcript:
+            words_trans = set(cleaned_transcript.split())
+            words_last = set(cleaned_last.split())
+            overlap = len(words_trans & words_last) / max(len(words_trans), 1)
+            if (cleaned_transcript == cleaned_last or 
+                (len(cleaned_transcript) > 5 and cleaned_transcript in cleaned_last) or 
+                (len(cleaned_last) > 5 and cleaned_last in cleaned_transcript) or
+                (len(words_trans) >= 2 and overlap >= 0.75)):
+                print(f"[ECHO REJECTED] Transcript '{transcript}' matches last spoken response '{conn.last_spoken_response}'. Discarding echo.", flush=True)
+                await ws.send_json({"type": "transcript", "text": ""})
+                await ws.send_json({"type": "status", "message": "Acoustic echo ignored."})
+                await ws.send_json({"type": "agent_status", "state": "stopped"})
+                return
+
+        await ws.send_json({"type": "transcript", "text": transcript})
+        if conn.interrupt_note:
+            transcript_sent = (
+                f"[note: your previous spoken reply was cut off by the user after you said: "
+                f"\"{conn.interrupt_note}\"]\n{transcript}"
+            )
+            conn.interrupt_note = None
         else:
-            if conn.interrupt_note:
-                transcript_sent = (
-                    f"[note: your previous spoken reply was cut off by the user after you said: "
-                    f"\"{conn.interrupt_note}\"]\n{transcript}"
-                )
-                conn.interrupt_note = None
-            else:
-                transcript_sent = transcript
-            conn.spoken_sentences = []
-            await pipeline.stream_response_audio(ws, transcript_sent, timing, conn)
-            timing.total_done_monotonic = time.perf_counter()
-            await ws.send_json({"type": "done", "turn_id": timing.turn_id, "timing": timing.summary()})
+            transcript_sent = transcript
+        conn.spoken_sentences = []
+        await pipeline.stream_response_audio(ws, transcript_sent, timing, conn)
+        if timing.response_text:
+            conn.last_spoken_response = timing.response_text
+        timing.total_done_monotonic = time.perf_counter()
+        await ws.send_json({"type": "done", "turn_id": timing.turn_id, "timing": timing.summary()})
     except asyncio.CancelledError:
         timing.errors.append("turn cancelled (barge-in or stop)")
         raise

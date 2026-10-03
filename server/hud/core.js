@@ -139,16 +139,14 @@
 
   function onPlaybackEnded() {
     if (JarvisCore.capturing) return;
+    JarvisCore.setState("standby", "STANDBY");
     if (JarvisCore.handsFree) {
-      // Continuous Conversation: automatically listen for follow-up!
+      // Re-enable wake word listening after audio reverberation clears
       setTimeout(() => {
-        if (JarvisCore.handsFree && !JarvisCore.capturing) {
-          console.log("Continuous Conversation: listening for user follow-up...");
-          JarvisCore.startTalk(true);
+        if (JarvisCore.handsFree && !JarvisCore.capturing && JarvisCore.state === "standby") {
+          startWakeListening();
         }
-      }, 450);
-    } else {
-      JarvisCore.setState("standby", "STANDBY");
+      }, 600);
     }
   }
 
@@ -460,14 +458,14 @@ registerProcessor("pcm16k",PCM16K);`;
         if (JarvisCore.capturing && activeSources.length === 0) {
           const now = Date.now();
           if (!JarvisCore.speechDetectedInTurn) {
-            if (JarvisCore.level > 0.040) {
+            if (JarvisCore.level > 0.055) {
               JarvisCore.speechDetectedInTurn = true;
               JarvisCore.speechStartTime = now;
               JarvisCore.consecutiveSilenceMs = 0;
               if (JarvisCore.handsFree) JarvisCore.setState("listening", "LISTENING", "SPEAKING... (PAUSE TO SEND)");
             }
           } else {
-            if (JarvisCore.level < 0.030) {
+            if (JarvisCore.level < 0.035) {
               JarvisCore.consecutiveSilenceMs += 80;
               if (JarvisCore.consecutiveSilenceMs >= 2000 && (now - JarvisCore.speechStartTime) >= 800) {
                 console.log("Silence detected (2.0s) -> auto-submitting turn");
