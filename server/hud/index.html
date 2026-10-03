@@ -28,7 +28,13 @@ html, body {
   color: #fff;
 }
 
-/* Template Switcher Dropdown */
+/* Controls Cluster & Switchers */
+.hud-controls-cluster {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
 .tmpl-selector {
   position: relative;
   display: inline-block;
@@ -38,16 +44,17 @@ html, body {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.18);
   color: #fff;
-  padding: 5px 12px;
+  padding: 5px 10px;
   border-radius: 20px;
   font-family: 'Space Mono', monospace;
   font-size: 11px;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   backdrop-filter: blur(12px);
   transition: all 0.2s;
+  white-space: nowrap;
 }
 .tmpl-btn:hover {
   background: rgba(255, 255, 255, 0.15);
@@ -57,41 +64,79 @@ html, body {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  background: rgba(18, 14, 30, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(18, 14, 30, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 12px;
   padding: 6px;
-  min-width: 190px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+  min-width: 195px;
+  max-height: 320px;
+  overflow-y: auto;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.8);
   backdrop-filter: blur(24px);
   display: none;
   flex-direction: column;
   gap: 4px;
 }
 .tmpl-dropdown.open { display: flex; }
+.tmpl-dropdown::-webkit-scrollbar { width: 4px; }
+.tmpl-dropdown::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 4px; }
 .tmpl-item {
   background: transparent;
   border: 0;
-  padding: 8px 12px;
+  padding: 7px 11px;
   text-align: left;
   color: #c084fc;
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: 12.5px;
+  font-family: 'Space Grotesk', -apple-system, sans-serif;
+  font-size: 12px;
   border-radius: 8px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: space-between;
   transition: all 0.15s;
+  white-space: nowrap;
 }
 .tmpl-item:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
   color: #fff;
 }
 .tmpl-item.active {
-  background: rgba(147, 51, 234, 0.3);
+  background: rgba(147, 51, 234, 0.35);
   color: #fff;
   font-weight: 600;
+}
+
+/* RTL Language Layout Rules */
+[dir="rtl"] {
+  font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+[dir="rtl"] .tmpl-dropdown {
+  right: auto;
+  left: 0;
+  text-align: right;
+}
+[dir="rtl"] .tmpl-item {
+  text-align: right;
+  flex-direction: row-reverse;
+  font-family: 'Vazirmatn', sans-serif;
+}
+[dir="rtl"] .ae-topbar-actions,
+[dir="rtl"] .ic-topbar-right {
+  flex-direction: row-reverse;
+}
+
+@media (max-width: 768px) {
+  .hud-controls-cluster {
+    gap: 4px;
+  }
+  .tmpl-btn {
+    padding: 4px 7px;
+    font-size: 10px;
+    gap: 3px;
+  }
+  .tmpl-btn .btn-long-label {
+    display: none;
+  }
 }
 
 /* PIN Gate for secure auth */
@@ -120,6 +165,9 @@ html, body {
   <button id="pinBtn" style="background:#00e5ff22; border:1px solid #00e5ff; color:#00e5ff; padding:8px 24px; font-family:'Orbitron'; font-size:12px; letter-spacing:2px; cursor:pointer; border-radius:4px">AUTHENTICATE</button>
   <div id="pinMsg" style="font-size:12px; color:#5c8397; letter-spacing:2px">&nbsp;</div>
 </div>
+
+<!-- Internationalization (i18n) & STT Manager -->
+<script src="i18n.js"></script>
 
 <!-- Core Engine -->
 <script src="core.js"></script>
@@ -178,69 +226,173 @@ html, body {
     const mount = document.getElementById("template-mount");
     TEMPLATES[tmplId].mount(mount);
 
-    renderTemplateSwitcher();
+    if (window.I18n) {
+      window.I18n.applyTranslations(mount);
+    }
+
+    renderHeaderControls();
   }
 
-  // 3. Render Template Switcher in Header Slot
-  function renderTemplateSwitcher() {
+  // 3. Render Header Controls (Template + Language + Whisper STT)
+  function renderHeaderControls() {
     const slot = document.getElementById("template-switcher-slot");
     if (!slot) return;
 
-    const current = TEMPLATES[activeTemplateId] || TEMPLATES.aetheria;
+    const currentTmpl = TEMPLATES[activeTemplateId] || TEMPLATES.aetheria;
+    const i18n = window.I18n || { lang: "en", sttLang: "fa", t: k => k, TRANSLATIONS: {}, WHISPER_LANGUAGES: [] };
+    const curLang = i18n.lang || "en";
+    const curStt = i18n.sttLang || "fa";
+
+    const curLangName = (i18n.TRANSLATIONS[curLang]?.name || curLang).split(" ")[0];
+    const curSttObj = (i18n.WHISPER_LANGUAGES || []).find(l => l.id === curStt);
+    const curSttLabel = curSttObj ? curSttObj.id.toUpperCase() : curStt.toUpperCase();
+
     slot.innerHTML = `
-      <div class="tmpl-selector">
-        <button class="tmpl-btn" id="tmpl-btn">
-          <span>✦ ${current.name}</span>
-          <span>▾</span>
-        </button>
-        <div class="tmpl-dropdown" id="tmpl-dropdown">
-          <button class="tmpl-item ${activeTemplateId==='aetheria'?'active':''}" data-id="aetheria">
-            <span>Aetheria (Female AI)</span>
-            ${activeTemplateId==='aetheria'?'✓':''}
+      <div class="hud-controls-cluster">
+        <!-- Template Switcher -->
+        <div class="tmpl-selector">
+          <button class="tmpl-btn" id="tmpl-btn" title="HUD Template">
+            <span>✦</span>
+            <span class="btn-long-label">${currentTmpl.name.split(" ")[0]}</span>
+            <span>▾</span>
           </button>
-          <button class="tmpl-item ${activeTemplateId==='ironcore'?'active':''}" data-id="ironcore">
-            <span>IronCore (Tactical HUD)</span>
-            ${activeTemplateId==='ironcore'?'✓':''}
+          <div class="tmpl-dropdown" id="tmpl-dropdown">
+            <button class="tmpl-item ${activeTemplateId==='aetheria'?'active':''}" data-tmpl="aetheria">
+              <span>Aetheria (Female AI)</span>
+              ${activeTemplateId==='aetheria'?'✓':''}
+            </button>
+            <button class="tmpl-item ${activeTemplateId==='ironcore'?'active':''}" data-tmpl="ironcore">
+              <span>IronCore (Tactical HUD)</span>
+              ${activeTemplateId==='ironcore'?'✓':''}
+            </button>
+            <button class="tmpl-item ${activeTemplateId==='zenith'?'active':''}" data-tmpl="zenith">
+              <span>Zenith (Minimal Orb)</span>
+              ${activeTemplateId==='zenith'?'✓':''}
+            </button>
+            <button class="tmpl-item ${activeTemplateId==='omni'?'active':''}" data-tmpl="omni">
+              <span>Omni (ChatGPT Style)</span>
+              ${activeTemplateId==='omni'?'✓':''}
+            </button>
+            <button class="tmpl-item ${activeTemplateId==='astra'?'active':''}" data-tmpl="astra">
+              <span>Astra (Gemini Style)</span>
+              ${activeTemplateId==='astra'?'✓':''}
+            </button>
+          </div>
+        </div>
+
+        <!-- UI Language Switcher -->
+        <div class="tmpl-selector">
+          <button class="tmpl-btn" id="lang-btn" title="${i18n.t('language') || 'Language'}">
+            <span>🌐</span>
+            <span>${curLang.toUpperCase()}</span>
+            <span>▾</span>
           </button>
-          <button class="tmpl-item ${activeTemplateId==='zenith'?'active':''}" data-id="zenith">
-            <span>Zenith (Minimal Orb)</span>
-            ${activeTemplateId==='zenith'?'✓':''}
+          <div class="tmpl-dropdown" id="lang-dropdown">
+            ${Object.keys(i18n.TRANSLATIONS).map(code => {
+              const lang = i18n.TRANSLATIONS[code];
+              const isActive = curLang === code;
+              return `
+                <button class="tmpl-item ${isActive ? 'active' : ''}" data-lang="${code}">
+                  <span>${lang.name}</span>
+                  ${isActive ? '✓' : ''}
+                </button>
+              `;
+            }).join("")}
+          </div>
+        </div>
+
+        <!-- Groq Whisper STT Mode Switcher -->
+        <div class="tmpl-selector">
+          <button class="tmpl-btn" id="stt-btn" title="${i18n.t('stt_mode') || 'Whisper STT'}">
+            <span>🎙️</span>
+            <span>STT:${curSttLabel}</span>
+            <span>▾</span>
           </button>
-          <button class="tmpl-item ${activeTemplateId==='omni'?'active':''}" data-id="omni">
-            <span>Omni (ChatGPT Style)</span>
-            ${activeTemplateId==='omni'?'✓':''}
-          </button>
-          <button class="tmpl-item ${activeTemplateId==='astra'?'active':''}" data-id="astra">
-            <span>Astra (Gemini Style)</span>
-            ${activeTemplateId==='astra'?'✓':''}
-          </button>
+          <div class="tmpl-dropdown" id="stt-dropdown">
+            ${(i18n.WHISPER_LANGUAGES || []).map(item => {
+              const isActive = curStt === item.id;
+              return `
+                <button class="tmpl-item ${isActive ? 'active' : ''}" data-stt="${item.id}">
+                  <span>${item.name}</span>
+                  ${isActive ? '✓' : ''}
+                </button>
+              `;
+            }).join("")}
+          </div>
         </div>
       </div>
     `;
 
-    const btn = document.getElementById("tmpl-btn");
-    const menu = document.getElementById("tmpl-dropdown");
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      menu.classList.toggle("open");
-    };
-    document.addEventListener("click", () => menu.classList.remove("open"));
+    // Dropdown toggle logic
+    const menus = [
+      { btn: document.getElementById("tmpl-btn"), menu: document.getElementById("tmpl-dropdown") },
+      { btn: document.getElementById("lang-btn"), menu: document.getElementById("lang-dropdown") },
+      { btn: document.getElementById("stt-btn"), menu: document.getElementById("stt-dropdown") }
+    ];
 
-    menu.querySelectorAll(".tmpl-item").forEach(item => {
-      item.onclick = () => {
-        const id = item.dataset.id;
-        menu.classList.remove("open");
-        setTemplate(id);
+    menus.forEach(({ btn, menu }) => {
+      if (!btn || !menu) return;
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        menus.forEach(m => { if (m.menu && m.menu !== menu) m.menu.classList.remove("open"); });
+        menu.classList.toggle("open");
       };
     });
+
+    document.addEventListener("click", () => {
+      menus.forEach(m => { if (m.menu) m.menu.classList.remove("open"); });
+    });
+
+    // Wire Template selection
+    const tmplMenu = document.getElementById("tmpl-dropdown");
+    if (tmplMenu) {
+      tmplMenu.querySelectorAll(".tmpl-item").forEach(item => {
+        item.onclick = () => {
+          tmplMenu.classList.remove("open");
+          setTemplate(item.dataset.tmpl);
+        };
+      });
+    }
+
+    // Wire Language selection
+    const langMenu = document.getElementById("lang-dropdown");
+    if (langMenu) {
+      langMenu.querySelectorAll(".tmpl-item").forEach(item => {
+        item.onclick = () => {
+          langMenu.classList.remove("open");
+          const code = item.dataset.lang;
+          if (window.I18n) window.I18n.setLanguage(code);
+          renderHeaderControls();
+        };
+      });
+    }
+
+    // Wire STT selection
+    const sttMenu = document.getElementById("stt-dropdown");
+    if (sttMenu) {
+      sttMenu.querySelectorAll(".tmpl-item").forEach(item => {
+        item.onclick = () => {
+          sttMenu.classList.remove("open");
+          const code = item.dataset.stt;
+          if (window.I18n) window.I18n.setSttLanguage(code);
+          renderHeaderControls();
+        };
+      });
+    }
   }
 
   // 4. Initialize Core & Launch
+  if (window.I18n) window.I18n.init();
+
   const initialId = await resolveTemplate();
   setTemplate(initialId);
 
   // Initialize unified Jarvis voice engine
   window.JarvisCore.init();
+
+  // Listen to i18n and stt changes to refresh control badges
+  window.JarvisCore.on("i18n_change", () => renderHeaderControls());
+  window.JarvisCore.on("stt_lang_change", () => renderHeaderControls());
 
   // Auth check & PIN gate
   const authed = await window.JarvisCore.checkAuth();

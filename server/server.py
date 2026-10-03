@@ -332,7 +332,7 @@ class VoicePipelineServer:
         self.turn_counter += 1
         return self.turn_counter
 
-    async def transcribe(self, audio: bytes, timing: TurnTiming | None = None) -> str:
+    async def transcribe(self, audio: bytes, timing: TurnTiming | None = None, language: str | None = None) -> str:
         if timing:
             timing.stt_start_monotonic = time.perf_counter()
 
@@ -348,7 +348,7 @@ class VoicePipelineServer:
         # 0) Groq Whisper (ultra-fast cloud LPU, whisper-large-v3)
         groq_cfg = self.cfg["stt"].get("groq") or {}
         if self.cfg["stt"].get("provider") == "groq" or groq_cfg.get("enabled"):
-            text = await asyncio.to_thread(self._groq_stt, audio, groq_cfg)
+            text = await asyncio.to_thread(self._groq_stt, audio, groq_cfg, language)
             if text is not None:
                 if timing:
                     timing.stt_model = f"groq:{groq_cfg.get('model', 'whisper-large-v3')}"
@@ -382,7 +382,7 @@ class VoicePipelineServer:
             timing.stt_final_monotonic = time.perf_counter()
         return (text or "").strip()
 
-    def _groq_stt(self, audio: bytes, groq_cfg: dict) -> str | None:
+    def _groq_stt(self, audio: bytes, groq_cfg: dict, language: str | None = None) -> str | None:
         """Transcribe raw PCM using Groq Whisper API (whisper-large-v3)."""
         key = os.environ.get(groq_cfg.get("api_key_env", "GROQ_API_KEY"), "")
         if not key:
@@ -404,9 +404,15 @@ class VoicePipelineServer:
         headers = {"Authorization": f"Bearer {key}"}
         files = {"file": ("audio.wav", wav_bytes, "audio/wav")}
         data = {"model": model, "temperature": 0.0}
-        lang = groq_cfg.get("language") or self.cfg["stt"].get("language")
-        if lang:
-            data["language"] = lang
+
+        # Resolve language:
+        # If client passes "auto", omit language so Groq Whisper auto-detects.
+        # If client passes explicit language (e.g. "fa", "en", "es"), set it.
+        # If None, fall back to config.
+        target_lang = language if language is not None else (groq_cfg.get("language") or self.cfg["stt"].get("language"))
+        if target_lang and target_lang.strip().lower() != "auto":
+            data["language"] = target_lang.strip().lower()
+
         prompt = groq_cfg.get("prompt")
         if prompt:
             data["prompt"] = prompt
@@ -1354,6 +1360,7 @@ class ConnState:
     interrupt_note: str | None = None
     partial_task: asyncio.Task | None = None
     last_partial_bytes: int = 0
+    language: str | None = None
 
 
 async def _run_turn(ws: WebSocket, pipeline: VoicePipelineServer, conn: ConnState) -> None:
@@ -1362,7 +1369,7 @@ async def _run_turn(ws: WebSocket, pipeline: VoicePipelineServer, conn: ConnStat
     audio = b"".join(conn.audio_chunks)
     conn.audio_chunks = []
     try:
-        transcript = await pipeline.transcribe(audio, timing)
+        transcript = await pipeline.transcribe(audio, timing, language=conn.language)
         timing.transcript = transcript
         await ws.send_json({"type": "transcript", "text": transcript})
         if not transcript:
@@ -1434,7 +1441,7 @@ def _maybe_schedule_partial(ws: WebSocket, pipeline: VoicePipelineServer, conn: 
 
     async def run() -> None:
         try:
-            text = await pipeline.transcribe(buf)
+            text = await pipeline.transcribe(buf, language=conn.language)
             if text and conn.recording:
                 await ws.send_json({"type": "partial_transcript", "text": text})
         except Exception:
@@ -1463,6 +1470,8 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     await _cancel_active_turn(ws, pipeline, conn)  # barge-in
                     if event.get("conversation"):
                         conn.conversation = str(event["conversation"])
+                    if "language" in event:
+                        conn.language = event.get("language")
                     conn.audio_chunks = []
                     conn.last_partial_bytes = 0
                     conn.recording = True
@@ -1470,6 +1479,9 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     conn.timing.audio_start_monotonic = time.perf_counter()
                     conn.timing.stt_model = CFG["stt"]["model"]
                     await ws.send_json({"type": "status", "message": f"Turn {conn.timing.turn_id} recording started."})
+                elif etype == "set_language":
+                    conn.language = event.get("language")
+                    await ws.send_json({"type": "status", "message": f"Whisper STT language set to {conn.language}."})
                 elif etype == "stop":
                     if conn.timing is None:
                         await ws.send_json({"type": "error", "message": "Received stop before start."})

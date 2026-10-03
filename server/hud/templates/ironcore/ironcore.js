@@ -26,12 +26,12 @@
             <!-- Left Col -->
             <div class="ic-col">
               <div class="ic-panel">
-                <h3><span>VOICE LINK</span><span>01</span></h3>
+                <h3><span data-i18n="engage_voice">VOICE LINK</span><span>01</span></h3>
                 <div class="ic-kv"><span>Server</span><b id="ic-ws-state">ONLINE</b></div>
                 <div class="ic-kv"><span>Mic</span><b id="ic-mic-state">READY</b></div>
                 <div style="margin-top:8px; display:flex; gap:6px">
-                  <button class="ic-btn" id="ic-talk-btn" style="flex:1">ENGAGE VOICE</button>
-                  <button class="ic-btn" id="ic-stop-btn" style="display:none; color:var(--ic-red)">STOP</button>
+                  <button class="ic-btn" id="ic-talk-btn" data-i18n="engage_voice" style="flex:1">ENGAGE VOICE</button>
+                  <button class="ic-btn" id="ic-stop-btn" data-i18n="stop" style="display:none; color:var(--ic-red)">STOP</button>
                 </div>
                 <div style="margin-top:6px">
                   <button class="ic-btn active" id="ic-vox-btn" style="width:100%">⚡ HANDS-FREE: ON</button>
@@ -39,14 +39,14 @@
               </div>
 
               <div class="ic-panel">
-                <h3><span>AGENT ACTIVITY</span><span>02</span></h3>
+                <h3><span data-i18n="activity">AGENT ACTIVITY</span><span>02</span></h3>
                 <div id="ic-activity-list" style="font-size:12px; color:var(--ic-txt-dim); max-height:140px; overflow-y:auto">
                   <div>— All systems nominal —</div>
                 </div>
               </div>
 
               <div class="ic-panel">
-                <h3><span>TELEMETRY</span><span>03</span></h3>
+                <h3><span data-i18n="telemetry">TELEMETRY</span><span>03</span></h3>
                 <div class="ic-kv"><span>Turns</span><b id="ic-turns">0</b></div>
                 <div class="ic-kv"><span>Tokens</span><b id="ic-tokens">—</b></div>
                 <div class="ic-kv"><span>Latency</span><b id="ic-latency">—</b></div>
@@ -58,15 +58,15 @@
               <div class="ic-reactor-box" id="ic-reactor-box" title="Click reactor or press Space to talk">
                 <canvas class="ic-canvas" id="ic-canvas"></canvas>
                 <div class="ic-state-badge">
-                  <div class="ic-st" id="ic-state-label">STANDBY</div>
+                  <div class="ic-st" id="ic-state-label" data-i18n="standby">STANDBY</div>
                 </div>
               </div>
 
               <div class="ic-feed" id="ic-feed"></div>
 
               <div class="ic-cmd-row">
-                <input class="ic-input" id="ic-chat-input" placeholder="Enter tactical directive... (Space to talk)" autocomplete="off">
-                <button class="ic-btn" id="ic-send-btn">TRANSMIT</button>
+                <input class="ic-input" id="ic-chat-input" data-i18n-ph="input_placeholder" placeholder="Enter tactical directive... (Space to talk)" autocomplete="off">
+                <button class="ic-btn" id="ic-send-btn" data-i18n="send">TRANSMIT</button>
               </div>
             </div>
 
@@ -196,13 +196,24 @@
       });
 
       core.on("capture_state", capturing => {
-        talkBtn.textContent = capturing ? "■ STOP & SEND" : "ENGAGE VOICE";
+        const t = (k, fb) => (window.I18n ? window.I18n.t(k) : fb);
+        talkBtn.textContent = capturing ? t("stop_send", "■ STOP & SEND") : t("engage_voice", "ENGAGE VOICE");
         stopBtn.style.display = capturing ? "block" : "none";
       });
 
       core.on("handsfree", hf => {
         voxBtn.classList.toggle("active", hf);
-        voxBtn.textContent = hf ? "⚡ HANDS-FREE: ON" : "⚡ HANDS-FREE: OFF";
+        const t = (k, fb) => (window.I18n ? window.I18n.t(k) : fb);
+        voxBtn.textContent = hf ? t("hands_free_on", "⚡ HANDS-FREE: ON") : t("hands_free_off", "⚡ HANDS-FREE: OFF");
+      });
+
+      core.on("i18n_change", () => {
+        const t = (k, fb) => (window.I18n ? window.I18n.t(k) : fb);
+        talkBtn.textContent = core.capturing ? t("stop_send", "■ STOP & SEND") : t("engage_voice", "ENGAGE VOICE");
+        voxBtn.textContent = core.handsFree ? t("hands_free_on", "⚡ HANDS-FREE: ON") : t("hands_free_off", "⚡ HANDS-FREE: OFF");
+        stopBtn.textContent = t("stop", "STOP");
+        sendBtn.textContent = t("send", "TRANSMIT");
+        chatInp.placeholder = t("input_placeholder", "Enter tactical directive... (Space to talk)");
       });
 
       core.on("transcript", msg => {

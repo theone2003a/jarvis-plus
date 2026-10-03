@@ -27,7 +27,7 @@
               <div class="ae-top-clock" id="ae-clock">--:--:--</div>
               <div id="template-switcher-slot"></div>
               <button class="ae-btn-icon" id="ae-inspector-btn" title="System Telemetry & Tools">
-                📊 <span>INSPECTOR</span>
+                📊 <span data-i18n="inspector">INSPECTOR</span>
               </button>
             </div>
           </header>
@@ -43,15 +43,15 @@
 
             <!-- Dynamic State Badge -->
             <div class="ae-core-badge">
-              <div class="ae-st-label" id="ae-state-label">STANDBY</div>
-              <div class="ae-st-hint" id="ae-state-hint">SAY "HEY JARVIS" OR CLICK MIC</div>
+              <div class="ae-st-label" id="ae-state-label" data-i18n="standby">STANDBY</div>
+              <div class="ae-st-hint" id="ae-state-hint" data-i18n="hint_standby_hf">SAY "HEY JARVIS" OR CLICK MIC</div>
             </div>
 
             <!-- Floating Subtitle Card -->
             <div class="ae-sub-card" id="ae-sub-card">
-              <div class="ae-sub-text" id="ae-sub-text">آماده شنیدن دستور شما...</div>
+              <div class="ae-sub-text" id="ae-sub-text" data-i18n="subtitle_default">Click the mic or press Space to speak</div>
               <div class="ae-sub-meta">
-                <span id="ae-sub-engine">GEMINI FLASH LITE · FA</span>
+                <span id="ae-sub-engine">GEMINI FLASH LITE</span>
                 <div class="ae-eq-bar">
                   <span></span><span></span><span></span><span></span>
                 </div>
@@ -68,7 +68,7 @@
           <footer class="ae-dock-wrap">
             <div class="ae-dock">
               <button class="ae-dock-btn" id="ae-vox-btn" title="Toggle Hands-Free Mode (H)">
-                ⚡ <span>HANDS-FREE: ON</span>
+                <span>⚡ HANDS-FREE: ON</span>
               </button>
               
               <button class="ae-mic-btn" id="ae-mic-btn" title="Engage Voice (Space)">
@@ -80,18 +80,18 @@
               </button>
 
               <button class="ae-dock-btn danger" id="ae-stop-btn" style="display:none" title="Interrupt / Stop">
-                ■ <span>STOP</span>
+                ■ <span data-i18n="stop">STOP</span>
               </button>
 
               <button class="ae-dock-btn" id="ae-feed-toggle-btn" title="Toggle Conversation View">
-                💬 <span>CHAT</span>
+                💬 <span data-i18n="chat">CHAT</span>
               </button>
             </div>
 
             <!-- Sleek Integrated Chat Query Row -->
             <div class="ae-chat-row" id="ae-chat-row">
-              <input class="ae-chat-input" id="ae-chat-input" placeholder="Ask or speak to Jarvis... (Space to talk)" autocomplete="off">
-              <button class="ae-chat-send" id="ae-chat-send">SEND</button>
+              <input class="ae-chat-input" id="ae-chat-input" data-i18n-ph="input_placeholder" placeholder="Ask or speak to Jarvis... (Space to talk)" autocomplete="off">
+              <button class="ae-chat-send" id="ae-chat-send" data-i18n="send">SEND</button>
             </div>
           </footer>
 
@@ -99,13 +99,13 @@
           <div class="ae-drawer-backdrop" id="ae-drawer-backdrop"></div>
           <aside class="ae-drawer" id="ae-drawer">
             <div class="ae-drawer-header">
-              <div class="ae-drawer-title">SYSTEM INSPECTOR</div>
+              <div class="ae-drawer-title" data-i18n="inspector">SYSTEM INSPECTOR</div>
               <button class="ae-drawer-close" id="ae-drawer-close">✕</button>
             </div>
             <div class="ae-drawer-tabs">
-              <button class="ae-tab-btn active" data-tab="telemetry">TELEMETRY</button>
-              <button class="ae-tab-btn" data-tab="activity">ACTIVITY</button>
-              <button class="ae-tab-btn" data-tab="views">VIEWS</button>
+              <button class="ae-tab-btn active" data-tab="telemetry" data-i18n="telemetry">TELEMETRY</button>
+              <button class="ae-tab-btn" data-tab="activity" data-i18n="activity">ACTIVITY</button>
+              <button class="ae-tab-btn" data-tab="views" data-i18n="views">VIEWS</button>
             </div>
             <div class="ae-drawer-body" id="ae-drawer-body">
               <!-- Content rendered dynamically based on active tab -->
@@ -324,7 +324,18 @@
 
       core.on("handsfree", hf => {
         voxBtn.classList.toggle("active", hf);
-        voxBtn.querySelector("span").textContent = hf ? "HANDS-FREE: ON" : "HANDS-FREE: OFF";
+        const t = (k, fb) => (window.I18n ? window.I18n.t(k) : fb);
+        voxBtn.querySelector("span").textContent = hf ? t("hands_free_on", "⚡ HANDS-FREE: ON") : t("hands_free_off", "⚡ HANDS-FREE: OFF");
+      });
+
+      core.on("i18n_change", () => {
+        const t = (k, fb) => (window.I18n ? window.I18n.t(k) : fb);
+        voxBtn.querySelector("span").textContent = core.handsFree ? t("hands_free_on", "⚡ HANDS-FREE: ON") : t("hands_free_off", "⚡ HANDS-FREE: OFF");
+        chatInp.placeholder = t("input_placeholder", "Ask or speak to Jarvis... (Space to talk)");
+        chatSend.textContent = t("send", "SEND");
+        drawerBtn.querySelector("span").textContent = t("inspector", "INSPECTOR");
+        feedToggle.querySelector("span").textContent = t("chat", "CHAT");
+        stopBtn.querySelector("span").textContent = t("stop", "STOP");
       });
 
       // Partial live subtitle

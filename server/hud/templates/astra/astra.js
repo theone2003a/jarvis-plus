@@ -27,16 +27,16 @@
               <canvas class="as-canvas" id="as-canvas"></canvas>
             </div>
 
-            <div class="as-state-pill" id="as-state-pill">Listening live...</div>
+            <div class="as-state-pill" id="as-state-pill" data-i18n="listening">Listening live...</div>
 
-            <div class="as-subtitle" id="as-subtitle">برای صحبت روی امواج صوتی بزنید یا کلید Space را فشار دهید</div>
+            <div class="as-subtitle" id="as-subtitle" data-i18n="subtitle_default">Click the mic or press Space to speak</div>
           </main>
 
           <!-- Floating Bottom Control Dock -->
           <footer class="as-dock-wrap">
             <div class="as-dock">
               <button class="as-btn active" id="as-vox-btn" title="Toggle Hands-Free (H)">
-                ⚡ <span>Hands-Free</span>
+                <span>⚡ Hands-Free</span>
               </button>
 
               <button class="as-mic-btn" id="as-mic-btn" title="Voice / Push-to-Talk (Space)">
@@ -48,11 +48,11 @@
               </button>
 
               <button class="as-btn danger" id="as-stop-btn" style="display:none" title="Interrupt Turn">
-                ■ <span>Stop</span>
+                ■ <span data-i18n="stop">Stop</span>
               </button>
 
               <button class="as-btn" id="as-chat-btn" title="Open Conversation">
-                💬 <span>Transcript</span>
+                💬 <span data-i18n="transcript">Transcript</span>
               </button>
             </div>
           </footer>
@@ -60,13 +60,13 @@
           <!-- Full Screen Chat Sheet -->
           <div class="as-chat-sheet" id="as-chat-sheet">
             <div class="as-sheet-head">
-              <span style="font-weight:600">Conversation History</span>
+              <span style="font-weight:600" data-i18n="transcript">Conversation History</span>
               <button class="as-btn" id="as-sheet-close">✕ Close</button>
             </div>
             <div class="as-sheet-list" id="as-sheet-list"></div>
             <div class="as-sheet-input-row">
-              <input class="as-sheet-inp" id="as-sheet-inp" placeholder="Ask Astra..." autocomplete="off">
-              <button class="as-btn" id="as-sheet-send" style="background:#4285f4; color:#fff; font-weight:600; padding:0 18px">Send</button>
+              <input class="as-sheet-inp" id="as-sheet-inp" data-i18n-ph="input_placeholder" placeholder="Ask Astra... (Space to talk)" autocomplete="off">
+              <button class="as-btn" id="as-sheet-send" data-i18n="send" style="background:#4285f4; color:#fff; font-weight:600; padding:0 18px">Send</button>
             </div>
           </div>
         </div>
@@ -204,7 +204,20 @@
 
       core.on("handsfree", hf => {
         voxBtn.classList.toggle("active", hf);
-        voxBtn.querySelector("span").textContent = hf ? "Hands-Free" : "Push-to-Talk";
+        const t = (k, fb) => (window.I18n ? window.I18n.t(k) : fb);
+        voxBtn.querySelector("span").textContent = hf ? t("hands_free_on", "⚡ Hands-Free: ON") : t("hands_free_off", "⚡ Hands-Free: OFF");
+      });
+
+      core.on("i18n_change", () => {
+        const t = (k, fb) => (window.I18n ? window.I18n.t(k) : fb);
+        voxBtn.querySelector("span").textContent = core.handsFree ? t("hands_free_on", "⚡ Hands-Free: ON") : t("hands_free_off", "⚡ Hands-Free: OFF");
+        chatBtn.querySelector("span").textContent = t("transcript", "Transcript");
+        stopBtn.querySelector("span").textContent = t("stop", "Stop");
+        sheetInp.placeholder = t("input_placeholder", "Ask Astra... (Space to talk)");
+        sheetSend.textContent = t("send", "Send");
+        if (core.state === "standby") {
+          document.getElementById("as-subtitle").textContent = t("subtitle_default", "Click the mic or press Space to speak");
+        }
       });
 
       core.on("partial", text => {

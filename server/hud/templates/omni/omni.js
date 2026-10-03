@@ -27,16 +27,16 @@
               <canvas class="om-canvas" id="om-canvas"></canvas>
             </div>
 
-            <div class="om-state-pill" id="om-state-pill">Listening</div>
+            <div class="om-state-pill" id="om-state-pill" data-i18n="listening">Listening</div>
 
-            <div class="om-subtitle" id="om-subtitle">برای صحبت کلیک کنید یا کلید Space را فشار دهید</div>
+            <div class="om-subtitle" id="om-subtitle" data-i18n="subtitle_default">Click the mic or press Space to speak</div>
           </main>
 
           <!-- Floating Bottom Control Dock -->
           <footer class="om-dock-wrap">
             <div class="om-dock">
               <button class="om-btn active" id="om-vox-btn" title="Toggle Hands-Free (H)">
-                ⚡ <span>Hands-Free</span>
+                <span>⚡ Hands-Free</span>
               </button>
 
               <button class="om-mic-btn" id="om-mic-btn" title="Voice / Push-to-Talk (Space)">
@@ -48,11 +48,11 @@
               </button>
 
               <button class="om-btn danger" id="om-stop-btn" style="display:none" title="Interrupt Turn">
-                ■ <span>Stop</span>
+                ■ <span data-i18n="stop">Stop</span>
               </button>
 
               <button class="om-btn" id="om-chat-btn" title="Open Conversation">
-                💬 <span>Transcript</span>
+                💬 <span data-i18n="transcript">Transcript</span>
               </button>
             </div>
           </footer>
@@ -60,13 +60,13 @@
           <!-- Full Screen Chat Sheet -->
           <div class="om-chat-sheet" id="om-chat-sheet">
             <div class="om-sheet-head">
-              <span style="font-weight:600">Conversation</span>
+              <span style="font-weight:600" data-i18n="transcript">Conversation</span>
               <button class="om-btn" id="om-sheet-close">✕ Close</button>
             </div>
             <div class="om-sheet-list" id="om-sheet-list"></div>
             <div class="om-sheet-input-row">
-              <input class="om-sheet-inp" id="om-sheet-inp" placeholder="Message Jarvis..." autocomplete="off">
-              <button class="om-btn" id="om-sheet-send" style="background:#fff; color:#000; font-weight:600; padding:0 18px">Send</button>
+              <input class="om-sheet-inp" id="om-sheet-inp" data-i18n-ph="input_placeholder" placeholder="Message Jarvis... (Space to talk)" autocomplete="off">
+              <button class="om-btn" id="om-sheet-send" data-i18n="send" style="background:#fff; color:#000; font-weight:600; padding:0 18px">Send</button>
             </div>
           </div>
         </div>
@@ -186,7 +186,20 @@
 
       core.on("handsfree", hf => {
         voxBtn.classList.toggle("active", hf);
-        voxBtn.querySelector("span").textContent = hf ? "Hands-Free" : "Push-to-Talk";
+        const t = (k, fb) => (window.I18n ? window.I18n.t(k) : fb);
+        voxBtn.querySelector("span").textContent = hf ? t("hands_free_on", "⚡ Hands-Free: ON") : t("hands_free_off", "⚡ Hands-Free: OFF");
+      });
+
+      core.on("i18n_change", () => {
+        const t = (k, fb) => (window.I18n ? window.I18n.t(k) : fb);
+        voxBtn.querySelector("span").textContent = core.handsFree ? t("hands_free_on", "⚡ Hands-Free: ON") : t("hands_free_off", "⚡ Hands-Free: OFF");
+        chatBtn.querySelector("span").textContent = t("transcript", "Transcript");
+        stopBtn.querySelector("span").textContent = t("stop", "Stop");
+        sheetInp.placeholder = t("input_placeholder", "Message Jarvis... (Space to talk)");
+        sheetSend.textContent = t("send", "Send");
+        if (core.state === "standby") {
+          document.getElementById("om-subtitle").textContent = t("subtitle_default", "Click the mic or press Space to speak");
+        }
       });
 
       core.on("partial", text => {

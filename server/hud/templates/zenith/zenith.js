@@ -27,16 +27,16 @@
               <canvas class="zn-canvas" id="zn-canvas"></canvas>
             </div>
 
-            <div class="zn-status-pill" id="zn-status-pill">STANDBY</div>
+            <div class="zn-status-pill" id="zn-status-pill" data-i18n="standby">STANDBY</div>
 
-            <div class="zn-subtitle" id="zn-subtitle">برای صحبت روی گوی ضربه بزنید یا کلید Space را فشار دهید</div>
+            <div class="zn-subtitle" id="zn-subtitle" data-i18n="subtitle_default">Click the mic or press Space to speak</div>
           </main>
 
           <!-- Floating Bottom Pill Dock -->
           <footer class="zn-dock-wrap">
             <div class="zn-dock">
               <button class="zn-btn active" id="zn-vox-btn">
-                ⚡ <span>Hands-Free</span>
+                <span>⚡ Hands-Free</span>
               </button>
 
               <button class="zn-mic-btn" id="zn-mic-btn">
@@ -48,7 +48,7 @@
               </button>
 
               <button class="zn-btn" id="zn-chat-btn">
-                💬 <span>Chat</span>
+                💬 <span data-i18n="chat">Chat</span>
               </button>
             </div>
           </footer>
@@ -56,13 +56,13 @@
           <!-- Full Screen Chat Sheet -->
           <div class="zn-chat-sheet" id="zn-chat-sheet">
             <div class="zn-sheet-head">
-              <span style="font-weight:600">Conversation History</span>
+              <span style="font-weight:600" data-i18n="transcript">Conversation History</span>
               <button class="zn-btn" id="zn-sheet-close">✕ Close</button>
             </div>
             <div class="zn-sheet-list" id="zn-sheet-list"></div>
             <div class="zn-sheet-input-row">
-              <input class="zn-sheet-inp" id="zn-sheet-inp" placeholder="Type a message..." autocomplete="off">
-              <button class="zn-btn" id="zn-sheet-send" style="background:#3b82f6; color:#fff; padding:0 20px">Send</button>
+              <input class="zn-sheet-inp" id="zn-sheet-inp" data-i18n-ph="input_placeholder" placeholder="Type a message... (Space to talk)" autocomplete="off">
+              <button class="zn-btn" id="zn-sheet-send" data-i18n="send" style="background:#3b82f6; color:#fff; padding:0 20px">Send</button>
             </div>
           </div>
         </div>
@@ -187,7 +187,19 @@
 
       core.on("handsfree", hf => {
         voxBtn.classList.toggle("active", hf);
-        voxBtn.querySelector("span").textContent = hf ? "Hands-Free" : "Push-to-Talk";
+        const t = (k, fb) => (window.I18n ? window.I18n.t(k) : fb);
+        voxBtn.querySelector("span").textContent = hf ? t("hands_free_on", "⚡ Hands-Free: ON") : t("hands_free_off", "⚡ Hands-Free: OFF");
+      });
+
+      core.on("i18n_change", () => {
+        const t = (k, fb) => (window.I18n ? window.I18n.t(k) : fb);
+        voxBtn.querySelector("span").textContent = core.handsFree ? t("hands_free_on", "⚡ Hands-Free: ON") : t("hands_free_off", "⚡ Hands-Free: OFF");
+        chatBtn.querySelector("span").textContent = t("chat", "Chat");
+        sheetInp.placeholder = t("input_placeholder", "Type a message... (Space to talk)");
+        sheetSend.textContent = t("send", "Send");
+        if (core.state === "standby") {
+          document.getElementById("zn-subtitle").textContent = t("subtitle_default", "Click the mic or press Space to speak");
+        }
       });
 
       core.on("partial", text => {

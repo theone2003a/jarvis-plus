@@ -44,10 +44,42 @@
 
     setState(st, label, hint) {
       this.state = st;
-      const defaultHint = (this.handsFree) 
-        ? 'SAY "HEY JARVIS" OR "جارویس"' 
-        : 'CLICK MIC OR SPACE TO TALK';
-      this.emit("state", { state: st, label: label || st.toUpperCase(), hint: hint !== undefined ? hint : defaultHint });
+      const t = (k, fb) => (window.I18n ? window.I18n.t(k) : fb);
+      let resolvedLabel = label;
+      if (!resolvedLabel) {
+        resolvedLabel = t(st, st.toUpperCase());
+      } else if (window.I18n) {
+        if (st === "standby" && (label === "STANDBY")) resolvedLabel = t("standby", "STANDBY");
+        else if (st === "listening" && (label === "LISTENING")) resolvedLabel = t("listening", "LISTENING");
+        else if (st === "thinking" && (label === "PROCESSING")) resolvedLabel = t("thinking", "PROCESSING");
+        else if (st === "speaking" && (label === "SPEAKING")) resolvedLabel = t("speaking", "SPEAKING");
+        else if (st === "tool" && (label === "WORKING")) resolvedLabel = t("working", "WORKING");
+        else if (label === "WAKE DETECTED!") resolvedLabel = t("wake_detected", "WAKE DETECTED!");
+      }
+
+      let defaultHint = (this.handsFree) 
+        ? t("hint_standby_hf", 'SAY "HEY JARVIS" OR CLICK MIC') 
+        : t("hint_standby_ptt", 'CLICK MIC OR SPACE TO TALK');
+
+      let resolvedHint = hint !== undefined ? hint : defaultHint;
+      if (resolvedHint === "J.A.R.V.I.S IS SPEAKING...") {
+        resolvedHint = t("hint_speaking_jarvis", resolvedHint);
+      } else if (typeof resolvedHint === "string" && resolvedHint.includes("PAUSE")) {
+        resolvedHint = t("hint_speaking_pause", resolvedHint);
+      }
+
+      this.emit("state", { state: st, label: resolvedLabel, hint: resolvedHint });
+    },
+
+    sttLanguage: localStorage.getItem("jarvis_stt_lang") || "fa",
+
+    setSttLanguage(code) {
+      this.sttLanguage = code;
+      localStorage.setItem("jarvis_stt_lang", code);
+      if (this.wsReady && ws) {
+        try { ws.send(JSON.stringify({ type: "set_language", language: code })); } catch(e) {}
+      }
+      this.emit("stt_lang_change", code);
     }
   };
 
@@ -171,6 +203,9 @@
       JarvisCore.wsReady = true;
       JarvisCore.emit("ws_state", true);
       JarvisCore.emit("log", { type: "sys", text: "VOICE SERVER CONNECTED" });
+      if (JarvisCore.sttLanguage) {
+        try { ws.send(JSON.stringify({ type: "set_language", language: JarvisCore.sttLanguage })); } catch (e) {}
+      }
     };
     ws.onclose = () => {
       JarvisCore.wsReady = false;
@@ -470,7 +505,14 @@ registerProcessor("pcm16k",PCM16K);`;
     this.consecutiveSilenceMs = 0;
     this.turnStartTime = Date.now();
 
-    ws.send(JSON.stringify({ type: "start", sample_rate: 16000, format: "pcm_s16le", channels: 1, conversation: CONV }));
+    ws.send(JSON.stringify({
+      type: "start",
+      sample_rate: 16000,
+      format: "pcm_s16le",
+      channels: 1,
+      conversation: CONV,
+      language: this.sttLanguage || "fa"
+    }));
     this.capturing = true;
     this.serverTurnActive = true;
     this.emit("capture_state", true);
