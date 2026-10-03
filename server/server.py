@@ -328,6 +328,42 @@ class VoicePipelineServer:
             print("Local RealtimeSTT Whisper initialized.", flush=True)
         return self._recorder
 
+    WHISPER_HALLUCINATION_WORDS = [
+        r"موسیقی\s*متن",
+        r"صدای\s*موسیقی",
+        r"صدای\s*موزیک",
+        r"موسیقی",
+        r"موزیک",
+        r"زیرنویس",
+        r"تشویق\s*حضار",
+        r"دست\s*زدن",
+        r"آپارات",
+        r"تماشا",
+        r"subtitles?\s*(?:by)?",
+        r"thank\s+you\s+for\s+watching",
+        r"subscribed?",
+    ]
+    PURE_HALLUCINATION_RE = re.compile(
+        r"^(?:\s*(?:" + "|".join(WHISPER_HALLUCINATION_WORDS) + r")\s*[\.,?!؟،؛]*)+$",
+        re.IGNORECASE
+    )
+
+    @classmethod
+    def clean_whisper_transcript(cls, text: str) -> str:
+        if not text:
+            return ""
+        # Strip bracketed/parenthesized noise descriptions: [موسیقی], (موسیقی), [Music], etc.
+        cleaned = re.sub(r"\[.*?\]|\(.*?\)", " ", text)
+        # Check if the entire transcript is pure hallucination tokens
+        if cls.PURE_HALLUCINATION_RE.match(cleaned.strip()):
+            return ""
+        # Strip trailing/leading hallucination tags
+        for hw in cls.WHISPER_HALLUCINATION_WORDS:
+            cleaned = re.sub(rf"(?:[\s,،؛]+|^){hw}[\s\.,?!؟،؛]*$", "", cleaned, flags=re.IGNORECASE)
+            cleaned = re.sub(rf"^[\s\.,?!؟،؛]*{hw}(?:[\s,،؛]+|$)", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        return cleaned
+
     def next_turn_id(self) -> int:
         self.turn_counter += 1
         return self.turn_counter
@@ -350,20 +386,22 @@ class VoicePipelineServer:
         if self.cfg["stt"].get("provider") == "groq" or groq_cfg.get("enabled"):
             text = await asyncio.to_thread(self._groq_stt, audio, groq_cfg, language)
             if text is not None:
+                cleaned = self.clean_whisper_transcript(text)
                 if timing:
                     timing.stt_model = f"groq:{groq_cfg.get('model', 'whisper-large-v3')}"
                     timing.stt_final_monotonic = time.perf_counter()
-                return text.strip()
+                return cleaned
             print("Groq STT failed or unavailable, falling back to local STT", flush=True)
         # 1) GPU worker (if configured and reachable) — big model, ~0.3s
         remote = self.cfg["stt"].get("remote") or {}
         if remote.get("url"):
             text = await asyncio.to_thread(self._remote_stt, audio, remote)
             if text is not None:
+                cleaned = self.clean_whisper_transcript(text)
                 if timing:
                     timing.stt_model = f"remote:{remote.get('name', 'gpu')}"
                     timing.stt_final_monotonic = time.perf_counter()
-                return text.strip()
+                return cleaned
         # 2) local Whisper fallback
         sample_rate = int(self.cfg["stt"].get("sample_rate", 16000))
         samples = (np.frombuffer(audio, dtype=np.int16).astype(np.float32) / 32768.0).copy()
@@ -378,9 +416,10 @@ class VoicePipelineServer:
             # treat as empty transcript instead of failing the turn
             print(f"local STT error treated as empty transcript: {exc}", flush=True)
             text = ""
+        cleaned = self.clean_whisper_transcript((text or "").strip())
         if timing:
             timing.stt_final_monotonic = time.perf_counter()
-        return (text or "").strip()
+        return cleaned
 
     def _groq_stt(self, audio: bytes, groq_cfg: dict, language: str | None = None) -> str | None:
         """Transcribe raw PCM using Groq Whisper API (whisper-large-v3)."""
@@ -414,7 +453,10 @@ class VoicePipelineServer:
             data["language"] = target_lang.strip().lower()
 
         prompt = groq_cfg.get("prompt")
-        if prompt:
+        if not prompt and (not target_lang or target_lang.strip().lower() == "fa"):
+            # Conversational Persian priming strongly discourages subtitle/music hallucinations on pauses
+            data["prompt"] = "گفتگوی صوتی روزمره به زبان فارسی محاوره‌ای، بدون زیرنویس یا موسیقی."
+        elif prompt:
             data["prompt"] = prompt
 
         proxies = {}
@@ -439,7 +481,8 @@ class VoicePipelineServer:
                 if r.ok:
                     if attempt_model != model:
                         print(f"Groq STT: used fallback model {attempt_model}", flush=True)
-                    return (r.json().get("text") or "").strip()
+                    raw = (r.json().get("text") or "").strip()
+                    return self.clean_whisper_transcript(raw)
                 if r.status_code == 429:
                     wait = min(float(r.headers.get("retry-after", "3")), 6.0)
                     print(f"Groq STT 429 on {attempt_model}, waiting {wait}s then trying next model...", flush=True)
@@ -603,8 +646,9 @@ class VoicePipelineServer:
             return
 
         gemini_cfg = voice.get("gemini") or {}
-        preferred_model = gemini_cfg.get("model", "gemini-3.8-flash-lite-tts")
+        preferred_model = gemini_cfg.get("model", "gemini-3.8-flash-tts")
         voice_name = gemini_cfg.get("voice_name", "Kore")
+        lang_code = voice.get("language_code") or gemini_cfg.get("language_code") or "fa-IR"
         timing.tts_model = f"gemini:{preferred_model}"
         timing.voice_id = voice_name
         timing.tts_request_start_monotonic = timing.tts_request_start_monotonic or time.perf_counter()
@@ -613,9 +657,9 @@ class VoicePipelineServer:
         # Model pool with fallback in case one hits quota/rate limits
         models_to_try = [
             preferred_model,
+            "gemini-3.8-flash-tts",
             "gemini-3.8-flash-lite-tts",
             "gemini-3.1-flash-tts-preview",
-            "gemini-3.8-flash-tts",
             "gemini-2.5-flash-preview-tts"
         ]
         # Deduplicate while preserving order
@@ -631,7 +675,8 @@ class VoicePipelineServer:
                         "prebuiltVoiceConfig": {
                             "voiceName": voice_name
                         }
-                    }
+                    },
+                    "languageCode": lang_code
                 }
             }
         }
@@ -694,8 +739,17 @@ class VoicePipelineServer:
                 timing.first_tts_audio_byte_monotonic = time.perf_counter()
             yield chunk
 
-    def tts_chunks_sync(self, text: str, timing: TurnTiming) -> Iterator[bytes]:
-        voice = self.cfg["voice"]
+    def tts_chunks_sync(self, text: str, timing: TurnTiming, language: str | None = None) -> Iterator[bytes]:
+        voice = dict(self.cfg["voice"])
+        if language:
+            lang_map = {
+                "fa": "fa-IR", "en": "en-US", "es": "es-ES", "fr": "fr-FR",
+                "de": "de-DE", "it": "it-IT", "tr": "tr-TR", "ru": "ru-RU",
+                "zh": "cmn-CN", "ar": "ar-XA", "ja": "ja-JP"
+            }
+            if language in lang_map:
+                voice["language_code"] = lang_map[language]
+
         provider = voice.get("provider", "elevenlabs")
 
         if provider in ("gemini", "gemini_tts", "google"):
@@ -814,11 +868,11 @@ class VoicePipelineServer:
                         await ws.send_json({"type": "agent_status", "state": "speaking"})
                         spoken = True
                     conn.spoken_sentences.append(clean)
-                    await self._send_tts_sentence(ws, clean, timing)
+                    await self._send_tts_sentence(ws, clean, timing, language=conn.language)
             tail = self._clean_for_tts(pending.strip())
             if tail:
                 conn.spoken_sentences.append(tail)
-                await self._send_tts_sentence(ws, tail, timing)
+                await self._send_tts_sentence(ws, tail, timing, language=conn.language)
         finally:
             if not forward_task.done():
                 forward_task.cancel()
@@ -848,7 +902,7 @@ class VoicePipelineServer:
             yield item
         await worker_task
 
-    async def _send_tts_sentence(self, ws: WebSocket, sentence: str, timing: TurnTiming) -> None:
+    async def _send_tts_sentence(self, ws: WebSocket, sentence: str, timing: TurnTiming, language: str | None = None) -> None:
         if not sentence:
             return
         q: asyncio.Queue = asyncio.Queue()
@@ -856,7 +910,7 @@ class VoicePipelineServer:
 
         def worker() -> None:
             try:
-                for chunk in self.tts_chunks_sync(sentence, timing):
+                for chunk in self.tts_chunks_sync(sentence, timing, language=language):
                     loop.call_soon_threadsafe(q.put_nowait, chunk)
                 loop.call_soon_threadsafe(q.put_nowait, None)
             except Exception as exc:
@@ -1374,7 +1428,8 @@ async def _run_turn(ws: WebSocket, pipeline: VoicePipelineServer, conn: ConnStat
         timing.transcript = transcript
         if not transcript:
             await ws.send_json({"type": "transcript", "text": ""})
-            await ws.send_json({"type": "error", "message": "No transcript detected."})
+            await ws.send_json({"type": "status", "message": "No speech or phantom sound ignored."})
+            await ws.send_json({"type": "agent_status", "state": "stopped"})
             return
 
         # Acoustic Echo Rejection: If transcript echoes what Jarvis just spoke through speakers, discard it.
