@@ -394,6 +394,12 @@ html, body {
   window.JarvisCore.on("i18n_change", () => renderHeaderControls());
   window.JarvisCore.on("stt_lang_change", () => renderHeaderControls());
 
+  // Save token from query params to cookie if provided
+  const urlToken = new URLSearchParams(location.search).get("token");
+  if (urlToken) {
+    document.cookie = `jarvis_token=${encodeURIComponent(urlToken)}; path=/; max-age=31536000; secure; samesite=lax`;
+  }
+
   // Auth check & PIN gate
   const authed = await window.JarvisCore.checkAuth();
   if (!authed) {

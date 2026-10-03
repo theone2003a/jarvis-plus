@@ -219,7 +219,10 @@
   /* ============================== WebSocket ============================= */
   let ws = null;
   function wsUrl() {
-    return (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws";
+    const urlParams = new URLSearchParams(location.search);
+    const token = urlParams.get("token") || (document.cookie.match(/(?:^|;\s*)jarvis_token=([^;]+)/) || [])[1];
+    const qs = token ? `?token=${encodeURIComponent(token)}` : "";
+    return (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws" + qs;
   }
 
   function connectWs() {
@@ -713,7 +716,9 @@ registerProcessor("pcm16k",PCM16K);`;
   /* ============================== Auth Check =========================== */
   JarvisCore.checkAuth = async function() {
     try {
-      const r = await fetch("/api/usage");
+      const urlToken = new URLSearchParams(location.search).get("token");
+      const headers = urlToken ? { "x-jarvis-token": urlToken } : {};
+      const r = await fetch("/api/usage", { headers });
       if (r.status === 401) return false;
     } catch {}
     return true;
@@ -746,7 +751,7 @@ registerProcessor("pcm16k",PCM16K);`;
       }
     });
 
-    // Auto-unlock audio context on first interaction
+    // Auto-unlock audio context on first interaction (desktop & mobile Safari)
     const unlock = () => {
       ensureCtx();
       if (JarvisCore.handsFree && !JarvisCore.capturing && JarvisCore.state !== "speaking") {
@@ -755,6 +760,8 @@ registerProcessor("pcm16k",PCM16K);`;
     };
     document.addEventListener("click", unlock, { once: true });
     document.addEventListener("keydown", unlock, { once: true });
+    document.addEventListener("touchstart", unlock, { once: true, passive: true });
+    document.addEventListener("pointerdown", unlock, { once: true, passive: true });
 
     if (this.handsFree) {
       startWakeListening();

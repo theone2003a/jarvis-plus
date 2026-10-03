@@ -1030,6 +1030,18 @@ ALLOWED_ORIGIN_HOSTS = {"jarvis.local", "jarvis", "localhost", "127.0.0.1"}
 ALLOWED_ORIGIN_HOSTS |= set((CFG.get("security") or {}).get("extra_origin_hosts") or [])
 
 
+def is_allowed_origin_host(host: str) -> bool:
+    if not host:
+        return False
+    if host in ALLOWED_ORIGIN_HOSTS or host.endswith(".local"):
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+        return ip.is_private or ip.is_loopback
+    except ValueError:
+        return False
+
+
 def hud_token() -> str | None:
     env_name = (CFG.get("security") or {}).get("hud_token_env", "JARVIS_HUD_TOKEN")
     return os.environ.get(env_name) or None
@@ -1059,7 +1071,7 @@ def _ws_allowed(ws: WebSocket) -> bool:
         return True  # non-browser client on the LAN (Python PTT, e2e tests)
     from urllib.parse import urlparse
     host = (urlparse(origin).hostname or "").lower()
-    if host not in ALLOWED_ORIGIN_HOSTS:
+    if not is_allowed_origin_host(host):
         return False
     token = hud_token()
     if not token:
