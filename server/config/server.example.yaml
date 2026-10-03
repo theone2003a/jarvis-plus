@@ -64,6 +64,16 @@ security:
   hud_token_env: JARVIS_HUD_TOKEN   # set in ~/.hermes/.env; unset = auth disabled
   extra_origin_hosts: []            # e.g. ["192.168.1.10"] if you open the HUD by raw IP
 
+hud:
+  default_template: aetheria       # default HUD template: aetheria, ironcore, or zenith
+  available_templates:
+    - id: aetheria
+      name: "Aetheria (Female AI)"
+    - id: ironcore
+      name: "IronCore (Tactical HUD)"
+    - id: zenith
+      name: "Zenith (Minimal Orb)"
+
 voice:
   provider: elevenlabs
   model: eleven_flash_v2_5

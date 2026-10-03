@@ -1,0 +1,247 @@
+/* ==========================================================================
+   ZENITH TEMPLATE — Minimalist Siri / Gemini Live Neural Voice Assistant
+   ========================================================================== */
+
+:root {
+  --zn-bg: #05050a;
+  --zn-glass: rgba(255, 255, 255, 0.06);
+  --zn-glass-border: rgba(255, 255, 255, 0.12);
+  --zn-txt: #ffffff;
+  --zn-txt-dim: #8e8e93;
+  --zn-glow-1: #6366f1;
+  --zn-glow-2: #ec4899;
+  --zn-glow-3: #06b6d4;
+}
+
+#zenith-root {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  background-color: var(--zn-bg);
+  background-image: 
+    radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.12) 0%, transparent 70%),
+    radial-gradient(circle at 30% 20%, rgba(236, 72, 153, 0.08) 0%, transparent 60%);
+  color: var(--zn-txt);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ---------------- Top Bar ---------------- */
+.zn-topbar {
+  width: 100%;
+  max-width: 800px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  z-index: 20;
+}
+.zn-brand {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: rgba(255, 255, 255, 0.85);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.zn-brand .zn-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 10px #10b981;
+}
+
+/* ---------------- Center Neural Orb ---------------- */
+.zn-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 100%;
+}
+
+.zn-orb-wrap {
+  position: relative;
+  width: min(45vh, 320px);
+  height: min(45vh, 320px);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.zn-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.zn-status-pill {
+  margin-top: 24px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--zn-glass-border);
+  border-radius: 30px;
+  padding: 6px 20px;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  transition: all 0.3s;
+}
+
+.zn-subtitle {
+  margin-top: 14px;
+  max-width: min(88vw, 560px);
+  min-height: 28px;
+  font-family: 'Vazirmatn', sans-serif;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.95);
+  text-align: center;
+  direction: rtl;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+
+/* ---------------- Floating Bottom Action Pill ---------------- */
+.zn-dock-wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 20px calc(16px + env(safe-area-inset-bottom));
+  z-index: 25;
+}
+
+.zn-dock {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(30, 30, 40, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 40px;
+  padding: 8px 16px;
+  backdrop-filter: blur(30px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+.zn-mic-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #000000;
+  border: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 0 25px rgba(255, 255, 255, 0.5);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.zn-mic-btn:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 35px rgba(255, 255, 255, 0.8);
+}
+.zn-mic-btn.active {
+  background: #ec4899;
+  color: #ffffff;
+  box-shadow: 0 0 35px rgba(236, 72, 153, 0.9);
+}
+
+.zn-btn {
+  background: transparent;
+  border: 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+.zn-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+.zn-btn.active {
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.15);
+}
+
+/* Chat Drawer */
+.zn-chat-sheet {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 10, 16, 0.95);
+  backdrop-filter: blur(32px);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(100%);
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 20px;
+}
+.zn-chat-sheet.open {
+  transform: translateY(0);
+}
+.zn-sheet-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.zn-sheet-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 0;
+}
+.zn-msg {
+  padding: 10px 16px;
+  border-radius: 18px;
+  font-size: 15px;
+  max-width: 82%;
+  line-height: 1.45;
+}
+.zn-msg.you {
+  align-self: flex-end;
+  background: #3b82f6;
+  color: #ffffff;
+}
+.zn-msg.jarvis {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+.zn-sheet-input-row {
+  display: flex;
+  gap: 10px;
+}
+.zn-sheet-inp {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 24px;
+  padding: 10px 18px;
+  color: #fff;
+  font-size: 15px;
+  outline: none;
+}

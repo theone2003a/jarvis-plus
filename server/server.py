@@ -973,7 +973,9 @@ def _request_authed(request: Request) -> bool:
     token = hud_token()
     if not token:
         return True
-    supplied = request.headers.get("x-jarvis-token") or request.cookies.get("jarvis_token")
+    supplied = (request.headers.get("x-jarvis-token") or 
+                request.cookies.get("jarvis_token") or 
+                request.query_params.get("token"))
     return supplied == token
 
 
@@ -1231,6 +1233,19 @@ async def machines() -> JSONResponse:
     result.extend(_WORKER_CACHE["data"] or
                   [{"name": w.get("name", "worker"), "online": False, "note": "checking..."} for w in workers])
     return JSONResponse({"machines": result})
+
+
+@app.get("/api/hud/config")
+async def hud_config() -> JSONResponse:
+    hud_conf = CFG.get("hud", {}) if isinstance(CFG, dict) else {}
+    return JSONResponse({
+        "default_template": hud_conf.get("default_template", "aetheria"),
+        "available_templates": hud_conf.get("available_templates", [
+            {"id": "aetheria", "name": "Aetheria (Female AI)"},
+            {"id": "ironcore", "name": "IronCore (Tactical HUD)"},
+            {"id": "zenith", "name": "Zenith (Minimal Orb)"},
+        ])
+    })
 
 
 @app.get("/")
