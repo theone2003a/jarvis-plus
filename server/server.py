@@ -334,11 +334,16 @@ class VoicePipelineServer:
         r"صدای\s*موزیک",
         r"موسیقی",
         r"موزیک",
-        r"زیرنویس",
+        r"زیرنویس(?:\s*توسط)?",
         r"تشویق\s*حضار",
         r"دست\s*زدن",
         r"آپارات",
         r"تماشا",
+        r"از\s*این\s*جا\s*باید\s*(?:بردارید|برداریم|برگردید|بردارند|بردارم)",
+        r"از\s*اینجا\s*باید\s*(?:بردارید|برداریم|برگردید|بردارند|بردارم)",
+        r"امبوز\s*شروع\s*زیر",
+        r"لطفاً\s*کانال\s*(?:ما\s*را\s*)?سابسکرایب\s*کنید",
+        r"لایک\s*و\s*کامنت\s*یادتون\s*نره",
         r"subtitles?\s*(?:by)?",
         r"thank\s+you\s+for\s+watching",
         r"subscribed?",
@@ -372,11 +377,12 @@ class VoicePipelineServer:
         if timing:
             timing.stt_start_monotonic = time.perf_counter()
 
-        # Reject pure zero/mute audio (RMS energy check)
+        # Reject pure zero/mute audio or low-energy ambient clips (fan hum / background noise)
         if len(audio) >= 320:
             samples_i16 = np.frombuffer(audio, dtype=np.int16)
             rms = float(np.sqrt(np.mean(samples_i16.astype(np.float64)**2)))
-            if rms < 50.0:  # Flatline / mute
+            duration_s = len(samples_i16) / 16000.0
+            if rms < 65.0 or (duration_s < 1.6 and rms < 120.0):
                 if timing:
                     timing.stt_final_monotonic = time.perf_counter()
                 return ""

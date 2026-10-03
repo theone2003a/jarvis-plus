@@ -183,6 +183,7 @@
       osc.connect(gain);
       gain.connect(ctx.destination);
       if (type === "wake") {
+        JarvisCore.chimeActiveUntil = Date.now() + 380;
         osc.type = "sine";
         osc.frequency.setValueAtTime(587.33, now);
         osc.frequency.exponentialRampToValueAtTime(880.00, now + 0.12);
@@ -192,6 +193,7 @@
         osc.start(now);
         osc.stop(now + 0.3);
       } else if (type === "send") {
+        JarvisCore.chimeActiveUntil = Date.now() + 250;
         osc.type = "sine";
         osc.frequency.setValueAtTime(880.00, now);
         osc.frequency.exponentialRampToValueAtTime(659.25, now + 0.09);
@@ -200,6 +202,7 @@
         osc.start(now);
         osc.stop(now + 0.18);
       } else if (type === "followup") {
+        JarvisCore.chimeActiveUntil = Date.now() + 280;
         osc.type = "sine";
         osc.frequency.setValueAtTime(523.25, now);
         osc.frequency.exponentialRampToValueAtTime(659.25, now + 0.10);
@@ -356,7 +359,7 @@
               JarvisCore.setState("listening", "WAKE DETECTED!", "START TALKING NOW...");
               setTimeout(() => {
                 if (!JarvisCore.capturing) JarvisCore.startTalk();
-              }, 80);
+              }, 320);
               return;
             }
           }
@@ -489,11 +492,17 @@ registerProcessor("pcm16k",PCM16K);`;
         if (JarvisCore.capturing && activeSources.length === 0) {
           const now = Date.now();
           if (!JarvisCore.speechDetectedInTurn) {
-            if (JarvisCore.level > 0.055) {
-              JarvisCore.speechDetectedInTurn = true;
-              JarvisCore.speechStartTime = now;
-              JarvisCore.consecutiveSilenceMs = 0;
-              if (JarvisCore.handsFree) JarvisCore.setState("listening", "LISTENING", "SPEAKING... (PAUSE TO SEND)");
+            const isChimeActive = now < (JarvisCore.chimeActiveUntil || 0);
+            if (!isChimeActive && JarvisCore.level > 0.062) {
+              JarvisCore.consecutiveVoiceMs = (JarvisCore.consecutiveVoiceMs || 0) + 80;
+              if (JarvisCore.consecutiveVoiceMs >= 200) {
+                JarvisCore.speechDetectedInTurn = true;
+                JarvisCore.speechStartTime = now - 200;
+                JarvisCore.consecutiveSilenceMs = 0;
+                if (JarvisCore.handsFree) JarvisCore.setState("listening", "LISTENING", "SPEAKING... (PAUSE TO SEND)");
+              }
+            } else {
+              JarvisCore.consecutiveVoiceMs = 0;
             }
           } else {
             if (JarvisCore.level < 0.038) {
@@ -538,6 +547,7 @@ registerProcessor("pcm16k",PCM16K);`;
     this.speechDetectedInTurn = false;
     this.speechStartTime = 0;
     this.consecutiveSilenceMs = 0;
+    this.consecutiveVoiceMs = 0;
     this.lastPartialTranscript = "";
     this.turnStartTime = Date.now();
 
