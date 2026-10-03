@@ -822,14 +822,14 @@ async function initMic(){
       if(capturing && activeSources.length === 0){
         const now=Date.now();
         if(!speechDetectedInTurn){
-          if(level > 0.065){
+          if(level > 0.040){
             speechDetectedInTurn = true;
             speechStartTime = now;
             consecutiveSilenceMs = 0;
             if(handsFree) $("stateHint").textContent = "SPEAKING... (PAUSE TO SEND)";
           }
         } else {
-          if(level < 0.040){
+          if(level < 0.030){
             consecutiveSilenceMs += 80;
             // 2.0 seconds of consecutive silence + at least 800ms of prior speech -> user finished sentence
             if(consecutiveSilenceMs >= 2000 && (now - speechStartTime) >= 800){

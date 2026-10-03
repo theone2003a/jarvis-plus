@@ -336,48 +336,34 @@ class VoicePipelineServer:
         if timing:
             timing.stt_start_monotonic = time.perf_counter()
 
-        # Reject near-silent audio (RMS energy check) to prevent hallucinations
+        # Reject pure zero/mute audio (RMS energy check)
         if len(audio) >= 320:
             samples_i16 = np.frombuffer(audio, dtype=np.int16)
             rms = float(np.sqrt(np.mean(samples_i16.astype(np.float64)**2)))
-            if rms < 150.0:
+            if rms < 50.0:  # Flatline / mute
                 if timing:
                     timing.stt_final_monotonic = time.perf_counter()
                 return ""
-
-        def _filter_hallucinations(t: str) -> str:
-            t = (t or "").strip()
-            # Discard Whisper prompt echoes or known hallucinations on low SNR
-            triggers = [
-                "گفتگوی دوستانه", "در این گفتگو", "محاوره‌ای به زبان فارسی",
-                "استفاده می‌کنید", "استفاده میکنید", "شعر بخونیم", "باهمدیگه",
-            ]
-            if any(trig in t for trig in triggers) and len(t) < 90:
-                print(f"STT: Discarded Whisper prompt hallucination: '{t}'", flush=True)
-                return ""
-            return t
 
         # 0) Groq Whisper (ultra-fast cloud LPU, whisper-large-v3)
         groq_cfg = self.cfg["stt"].get("groq") or {}
         if self.cfg["stt"].get("provider") == "groq" or groq_cfg.get("enabled"):
             text = await asyncio.to_thread(self._groq_stt, audio, groq_cfg)
             if text is not None:
-                text = _filter_hallucinations(text)
                 if timing:
                     timing.stt_model = f"groq:{groq_cfg.get('model', 'whisper-large-v3')}"
                     timing.stt_final_monotonic = time.perf_counter()
-                return text
+                return text.strip()
             print("Groq STT failed or unavailable, falling back to local STT", flush=True)
         # 1) GPU worker (if configured and reachable) — big model, ~0.3s
         remote = self.cfg["stt"].get("remote") or {}
         if remote.get("url"):
             text = await asyncio.to_thread(self._remote_stt, audio, remote)
             if text is not None:
-                text = _filter_hallucinations(text)
                 if timing:
                     timing.stt_model = f"remote:{remote.get('name', 'gpu')}"
                     timing.stt_final_monotonic = time.perf_counter()
-                return text
+                return text.strip()
         # 2) local Whisper fallback
         sample_rate = int(self.cfg["stt"].get("sample_rate", 16000))
         samples = (np.frombuffer(audio, dtype=np.int16).astype(np.float32) / 32768.0).copy()
@@ -392,7 +378,6 @@ class VoicePipelineServer:
             # treat as empty transcript instead of failing the turn
             print(f"local STT error treated as empty transcript: {exc}", flush=True)
             text = ""
-        text = _filter_hallucinations(text)
         if timing:
             timing.stt_final_monotonic = time.perf_counter()
         return (text or "").strip()
