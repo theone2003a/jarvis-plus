@@ -544,35 +544,129 @@
 .ae-kv span { color: var(--ae-txt-dim); font-size: 12px; }
 .ae-kv b { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--ae-txt); }
 
-/* Conversation / Chat Drawer Overlay */
-.ae-feed-wrap {
-  position: absolute;
-  top: 60px;
-  bottom: 140px;
-  width: min(92vw, 680px);
+/* ---------------- Holographic Conversation Modal / Sheet ---------------- */
+.ae-chat-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: rgba(5, 4, 12, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  opacity: 0;
   pointer-events: none;
+  transition: opacity 0.25s ease, backdrop-filter 0.25s ease;
+}
+.ae-chat-modal.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.ae-chat-card {
+  width: min(94vw, 680px);
+  height: min(78vh, 700px);
+  background: rgba(18, 13, 34, 0.95);
+  border: 1px solid rgba(192, 132, 252, 0.35);
+  border-radius: 22px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(147, 51, 234, 0.25);
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
-  z-index: 10;
   overflow: hidden;
+  transform: scale(0.96) translateY(12px);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
+.ae-chat-modal.open .ae-chat-card {
+  transform: scale(1) translateY(0);
+}
+
+.ae-chat-head {
+  padding: 14px 18px;
+  background: rgba(26, 20, 48, 0.6);
+  border-bottom: 1px solid rgba(192, 132, 252, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ae-chat-head-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ae-chat-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--ae-cyan);
+  border-radius: 50%;
+  box-shadow: 0 0 10px var(--ae-cyan);
+}
+.ae-chat-title {
+  font-family: 'Sora', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #fff;
+}
+.ae-chat-count {
+  font-family: 'Space Mono', monospace;
+  font-size: 10.5px;
+  color: var(--ae-txt-dim);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+.ae-chat-close {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--ae-txt-dim);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+.ae-chat-close:hover {
+  background: rgba(239, 68, 68, 0.25);
+  color: #ff6b6b;
+  border-color: #ef4444;
+}
+
 .ae-feed-list {
+  flex: 1;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  pointer-events: auto;
-  max-height: 100%;
+  gap: 12px;
+  padding: 16px 20px;
 }
+.ae-feed-list::-webkit-scrollbar { width: 5px; }
+.ae-feed-list::-webkit-scrollbar-thumb { background: rgba(192, 132, 252, 0.25); border-radius: 4px; }
+
+.ae-chat-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  padding: 40px 20px;
+}
+
 .ae-msg {
-  padding: 9px 14px;
-  border-radius: 12px;
+  padding: 10px 16px;
+  border-radius: 16px;
+  font-family: 'Vazirmatn', 'Space Grotesk', -apple-system, sans-serif;
   font-size: 14px;
-  line-height: 1.45;
-  max-width: 85%;
-  animation: aeMsgIn 0.2s ease-out;
+  line-height: 1.6;
+  max-width: 82%;
+  word-break: break-word;
+  white-space: pre-wrap;
+  animation: aeMsgIn 0.22s ease-out;
 }
 @keyframes aeMsgIn {
   from { opacity: 0; transform: translateY(6px); }
@@ -580,16 +674,26 @@
 }
 .ae-msg.you {
   align-self: flex-end;
-  background: rgba(147, 51, 234, 0.25);
-  border: 1px solid rgba(192, 132, 252, 0.35);
+  background: linear-gradient(135deg, rgba(147, 51, 234, 0.35) 0%, rgba(126, 34, 206, 0.45) 100%);
+  border: 1px solid rgba(192, 132, 252, 0.45);
+  border-bottom-right-radius: 4px;
   color: #faf5ff;
+  box-shadow: 0 4px 16px rgba(147, 51, 234, 0.15);
 }
 .ae-msg.jarvis {
   align-self: flex-start;
-  background: rgba(22, 17, 44, 0.88);
-  border: 1px solid rgba(168, 85, 247, 0.28);
+  background: rgba(26, 20, 48, 0.9);
+  border: 1px solid rgba(168, 85, 247, 0.35);
   border-left: 3px solid var(--ae-amethyst);
+  border-bottom-left-radius: 4px;
   color: #f1edfa;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+}
+[dir="rtl"] .ae-msg.jarvis {
+  border-left: 1px solid rgba(168, 85, 247, 0.35);
+  border-right: 3px solid var(--ae-amethyst);
+  border-bottom-left-radius: 16px;
+  border-bottom-right-radius: 4px;
 }
 .ae-msg.sys {
   align-self: center;
@@ -597,4 +701,61 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: var(--ae-txt-dim);
   font-size: 12px;
+}
+
+.ae-chat-input-bar {
+  padding: 12px 16px;
+  background: rgba(14, 10, 26, 0.85);
+  border-top: 1px solid rgba(192, 132, 252, 0.2);
+  display: flex;
+  gap: 10px;
+}
+.ae-chat-input-modal {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(192, 132, 252, 0.25);
+  border-radius: 12px;
+  padding: 10px 14px;
+  color: #fff;
+  font-family: 'Vazirmatn', 'Space Grotesk', sans-serif;
+  font-size: 14px;
+  outline: none;
+  transition: all 0.2s;
+}
+.ae-chat-input-modal:focus {
+  border-color: var(--ae-amethyst);
+  box-shadow: 0 0 16px rgba(168, 85, 247, 0.3);
+}
+.ae-chat-send-modal {
+  background: linear-gradient(135deg, var(--ae-violet) 0%, var(--ae-amethyst) 100%);
+  border: 1px solid var(--ae-lilac);
+  color: #fff;
+  border-radius: 12px;
+  padding: 0 18px;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.ae-chat-send-modal:hover {
+  filter: brightness(1.15);
+  box-shadow: 0 0 16px rgba(192, 132, 252, 0.45);
+}
+
+/* Mobile responsive bottom sheet */
+@media (max-width: 640px) {
+  .ae-chat-modal {
+    padding: 0;
+    align-items: flex-end;
+  }
+  .ae-chat-card {
+    width: 100%;
+    height: 82vh;
+    border-radius: 24px 24px 0 0;
+    transform: translateY(100%);
+  }
+  .ae-chat-modal.open .ae-chat-card {
+    transform: translateY(0);
+  }
 }

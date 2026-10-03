@@ -58,9 +58,28 @@
               </div>
             </div>
 
-            <!-- Chat Feed Overlay -->
-            <div class="ae-feed-wrap">
-              <div class="ae-feed-list" id="ae-feed-list"></div>
+            <!-- Dedicated Holographic Conversation Modal / Drawer -->
+            <div class="ae-chat-modal" id="ae-chat-modal">
+              <div class="ae-chat-card">
+                <div class="ae-chat-head">
+                  <div class="ae-chat-head-left">
+                    <span class="ae-chat-dot"></span>
+                    <span class="ae-chat-title" data-i18n="chat">CONVERSATION</span>
+                    <span class="ae-chat-count" id="ae-chat-count">0 messages</span>
+                  </div>
+                  <button class="ae-chat-close" id="ae-chat-close" title="Close (Esc)">✕</button>
+                </div>
+                <div class="ae-feed-list" id="ae-feed-list">
+                  <div class="ae-chat-empty" id="ae-chat-empty">
+                    <div style="font-size:32px; margin-bottom:10px">💬</div>
+                    <div style="font-size:13px; color:var(--ae-txt-dim)" data-i18n="subtitle_default">Click the mic or press Space to speak</div>
+                  </div>
+                </div>
+                <div class="ae-chat-input-bar">
+                  <input class="ae-chat-input-modal" id="ae-chat-input-modal" data-i18n-ph="input_placeholder" placeholder="Ask or speak to Jarvis... (Space to talk)" autocomplete="off">
+                  <button class="ae-chat-send-modal" id="ae-chat-send-modal" data-i18n="send">SEND</button>
+                </div>
+              </div>
             </div>
           </main>
 
@@ -258,8 +277,13 @@
       const drawerBackdrop = document.getElementById("ae-drawer-backdrop");
       const drawerClose = document.getElementById("ae-drawer-close");
       const feedList = document.getElementById("ae-feed-list");
-      const feedWrap = document.querySelector(".ae-feed-wrap");
       const feedToggle = document.getElementById("ae-feed-toggle-btn");
+      const chatModal = document.getElementById("ae-chat-modal");
+      const chatClose = document.getElementById("ae-chat-close");
+      const chatCount = document.getElementById("ae-chat-count");
+      const chatEmpty = document.getElementById("ae-chat-empty");
+      const modalInp = document.getElementById("ae-chat-input-modal");
+      const modalSend = document.getElementById("ae-chat-send-modal");
 
       // Voice Controls
       micBtn.onclick = () => core.toggleTalk();
@@ -290,26 +314,60 @@
         };
       });
 
-      // Feed Toggle
-      let feedVisible = false;
-      feedWrap.style.display = "none";
-      feedToggle.onclick = () => {
-        feedVisible = !feedVisible;
-        feedWrap.style.display = feedVisible ? "flex" : "none";
-        feedToggle.classList.toggle("active", feedVisible);
+      // Holographic Chat Modal Open / Close
+      let chatOpen = false;
+      const openChat = () => {
+        chatOpen = true;
+        chatModal.classList.add("open");
+        feedToggle.classList.add("active");
+        setTimeout(() => { if (modalInp) modalInp.focus(); }, 120);
+        if (feedList) feedList.scrollTop = feedList.scrollHeight;
       };
+      const closeChat = () => {
+        chatOpen = false;
+        chatModal.classList.remove("open");
+        feedToggle.classList.remove("active");
+      };
+      feedToggle.onclick = () => {
+        if (chatOpen) closeChat();
+        else openChat();
+      };
+      if (chatClose) chatClose.onclick = closeChat;
+      if (chatModal) {
+        chatModal.onclick = (e) => {
+          if (e.target === chatModal) closeChat();
+        };
+      }
+      window.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && chatOpen) closeChat();
+      });
 
-      // Chat input
-      const send = () => {
+      // Dock Chat input
+      const sendFromDock = () => {
         const val = chatInp.value.trim();
         if (!val) return;
         chatInp.value = "";
         core.sendChat(val);
+        openChat();
       };
-      chatSend.onclick = send;
+      chatSend.onclick = sendFromDock;
       chatInp.onkeydown = e => {
-        if (e.key === "Enter") send();
+        if (e.key === "Enter") sendFromDock();
       };
+
+      // Modal Chat input
+      if (modalSend && modalInp) {
+        const sendFromModal = () => {
+          const val = modalInp.value.trim();
+          if (!val) return;
+          modalInp.value = "";
+          core.sendChat(val);
+        };
+        modalSend.onclick = sendFromModal;
+        modalInp.onkeydown = e => {
+          if (e.key === "Enter") sendFromModal();
+        };
+      }
 
       // Wire Core State
       core.on("state", e => {
@@ -333,6 +391,8 @@
         voxBtn.querySelector("span").textContent = core.handsFree ? t("hands_free_on", "⚡ HANDS-FREE: ON") : t("hands_free_off", "⚡ HANDS-FREE: OFF");
         chatInp.placeholder = t("input_placeholder", "Ask or speak to Jarvis... (Space to talk)");
         chatSend.textContent = t("send", "SEND");
+        if (modalInp) modalInp.placeholder = t("input_placeholder", "Ask or speak to Jarvis... (Space to talk)");
+        if (modalSend) modalSend.textContent = t("send", "SEND");
         drawerBtn.querySelector("span").textContent = t("inspector", "INSPECTOR");
         feedToggle.querySelector("span").textContent = t("chat", "CHAT");
         stopBtn.querySelector("span").textContent = t("stop", "STOP");
@@ -347,9 +407,14 @@
       });
 
       // Final transcript / messages
+      let totalMessages = 0;
       core.on("transcript", msg => {
         document.getElementById("ae-sub-text").textContent = msg.text;
         document.getElementById("ae-sub-engine").textContent = msg.isUser ? "USER SPEECH" : "GEMINI FLASH LITE (KORE)";
+
+        totalMessages++;
+        if (chatCount) chatCount.textContent = `${totalMessages} message${totalMessages > 1 ? "s" : ""}`;
+        if (chatEmpty) chatEmpty.style.display = "none";
 
         // Append to chat list
         const div = document.createElement("div");
