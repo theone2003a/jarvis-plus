@@ -17,6 +17,7 @@ hermes:
   ack_after_seconds: 0               # >0 = speak a short ack while the agent works
   ack_texts: ["On it.", "Still working.", "Almost there."]
   fallback_provider: anthropic
+  audible_fillers: true          # Speak instant natural filler ("Checking that now...") during tool execution
   instructions: >
     You are speaking aloud through a voice pipeline. Replies are converted
     to speech, so use plain conversational prose only: no markdown, no lists,
@@ -25,12 +26,25 @@ hermes:
     spoken words. Never speak secrets, API keys, or passwords aloud.
 
 stt:
+  provider: groq            # groq, soniox, or local
   model: small.en           # LOCAL model (fallback if remote configured; primary otherwise)
   device: cpu
   compute_type: int8
   sample_rate: 16000
   partials: true            # live transcript while speaking
   partial_interval: 1.2     # seconds of new audio between partial passes
+  vad:
+    enabled: true           # Silero VAD neural speech gate (~12ms CPU)
+    threshold: 0.45         # Speech probability threshold
+    trim_silence: true      # Strip leading/trailing dead silence to accelerate STT
+  context_terms:
+    terms: ["Jarvis", "Kubernetes", "Docker", "Python", "Git"]
+    domain: "Personal AI Assistant"
+    topic: "System commands and conversation"
+  # soniox:
+  #   model: stt-rt-v5
+  #   api_key_env: SONIOX_API_KEY
+  #   language: "fa"
   # Optional GPU worker (worker/stt_server.py on any NVIDIA machine):
   # big-model accuracy at ~0.2s. Falls back to the local model automatically.
   # remote:

@@ -46,6 +46,17 @@ try:
 except ImportError:  # machines panel degrades gracefully
     psutil = None
 
+try:
+    import torch
+    import silero_vad
+    SILERO_VAD_MODEL = silero_vad.load_silero_vad()
+    _t_warm = torch.zeros(16000, dtype=torch.float32)
+    _ = silero_vad.get_speech_timestamps(_t_warm, SILERO_VAD_MODEL, sampling_rate=16000)
+    print("Silero VAD initialized and warmed.", flush=True)
+except Exception as exc:
+    SILERO_VAD_MODEL = None
+    print(f"Silero VAD not loaded: {exc}", flush=True)
+
 ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "config" / "server.yaml"
 LOG_PATH = ROOT / "logs" / "latency.jsonl"
@@ -387,7 +398,43 @@ class VoicePipelineServer:
                     timing.stt_final_monotonic = time.perf_counter()
                 return ""
 
-        # 0) Groq Whisper (ultra-fast cloud LPU, whisper-large-v3)
+        # Silero VAD neural speech gate & dead-silence trimmer (~12ms CPU inference)
+        vad_cfg = self.cfg["stt"].get("vad") or {}
+        if SILERO_VAD_MODEL is not None and vad_cfg.get("enabled", True) and len(audio) >= 1600:
+            samples_f32 = (np.frombuffer(audio, dtype=np.int16).astype(np.float32) / 32768.0).copy()
+            tensor_wav = torch.from_numpy(samples_f32)
+            threshold = float(vad_cfg.get("threshold", 0.45))
+            speech_timestamps = silero_vad.get_speech_timestamps(
+                tensor_wav, SILERO_VAD_MODEL, sampling_rate=16000, threshold=threshold
+            )
+            total_speech_samples = sum(ts["end"] - ts["start"] for ts in speech_timestamps)
+            # If less than 200ms of true speech detected, drop non-speech noise/clicks immediately
+            if total_speech_samples < 3200:
+                if timing:
+                    timing.stt_final_monotonic = time.perf_counter()
+                return ""
+
+            # Trim dead silence at edges to speed up STT transcription
+            if vad_cfg.get("trim_silence", True) and speech_timestamps:
+                start_idx = max(0, speech_timestamps[0]["start"] - 1920)
+                end_idx = min(len(samples_f32), speech_timestamps[-1]["end"] + 1920)
+                trimmed_samples = samples_f32[start_idx:end_idx]
+                trimmed_i16 = (trimmed_samples * 32767.0).astype(np.int16)
+                audio = trimmed_i16.tobytes()
+
+        # 0) Soniox STT (if provider == 'soniox' or configured)
+        soniox_cfg = self.cfg["stt"].get("soniox") or {}
+        if self.cfg["stt"].get("provider") == "soniox" or soniox_cfg.get("enabled"):
+            text = await asyncio.to_thread(self._soniox_stt, audio, soniox_cfg, language)
+            if text is not None:
+                cleaned = self.clean_whisper_transcript(text)
+                if timing:
+                    timing.stt_model = f"soniox:{soniox_cfg.get('model', 'stt-rt-v5')}"
+                    timing.stt_final_monotonic = time.perf_counter()
+                return cleaned
+            print("Soniox STT failed or unavailable, falling back to Groq STT", flush=True)
+
+        # 1) Groq Whisper (ultra-fast cloud LPU, whisper-large-v3)
         groq_cfg = self.cfg["stt"].get("groq") or {}
         if self.cfg["stt"].get("provider") == "groq" or groq_cfg.get("enabled"):
             text = await asyncio.to_thread(self._groq_stt, audio, groq_cfg, language)
@@ -398,7 +445,7 @@ class VoicePipelineServer:
                     timing.stt_final_monotonic = time.perf_counter()
                 return cleaned
             print("Groq STT failed or unavailable, falling back to local STT", flush=True)
-        # 1) GPU worker (if configured and reachable) — big model, ~0.3s
+        # 2) GPU worker (if configured and reachable) — big model, ~0.3s
         remote = self.cfg["stt"].get("remote") or {}
         if remote.get("url"):
             text = await asyncio.to_thread(self._remote_stt, audio, remote)
@@ -408,7 +455,7 @@ class VoicePipelineServer:
                     timing.stt_model = f"remote:{remote.get('name', 'gpu')}"
                     timing.stt_final_monotonic = time.perf_counter()
                 return cleaned
-        # 2) local Whisper fallback
+        # 3) local Whisper fallback
         sample_rate = int(self.cfg["stt"].get("sample_rate", 16000))
         samples = (np.frombuffer(audio, dtype=np.int16).astype(np.float32) / 32768.0).copy()
         try:
@@ -459,11 +506,16 @@ class VoicePipelineServer:
             data["language"] = target_lang.strip().lower()
 
         prompt = groq_cfg.get("prompt")
+        ctx_terms = (self.cfg["stt"].get("context_terms") or {}).get("terms") or []
+        terms_str = "، ".join(ctx_terms[:16]) if ctx_terms else ""
         if not prompt and (not target_lang or target_lang.strip().lower() == "fa"):
             # Conversational Persian priming strongly discourages subtitle/music hallucinations on pauses
-            data["prompt"] = "گفتگوی صوتی روزمره به زبان فارسی محاوره‌ای، بدون زیرنویس یا موسیقی."
+            base_prompt = "گفتگوی صوتی روزمره به زبان فارسی محاوره‌ای، بدون زیرنویس یا موسیقی."
+            data["prompt"] = f"{base_prompt} اصطلاحات: {terms_str}." if terms_str else base_prompt
         elif prompt:
-            data["prompt"] = prompt
+            data["prompt"] = f"{prompt} اصطلاحات: {terms_str}." if (terms_str and terms_str not in prompt) else prompt
+        elif terms_str:
+            data["prompt"] = f"Voice conversation keywords: {terms_str}."
 
         proxies = {}
         proxy = os.environ.get("ALL_PROXY") or os.environ.get("HTTPS_PROXY")
@@ -502,6 +554,71 @@ class VoicePipelineServer:
         print("Groq STT: all models rate-limited, falling back to local STT", flush=True)
         return None
 
+    def _soniox_stt(self, audio: bytes, soniox_cfg: dict, language: str | None = None) -> str | None:
+        """Transcribe raw PCM using Soniox REST API (stt-rt-v5)."""
+        key = os.environ.get(soniox_cfg.get("api_key_env", "SONIOX_API_KEY"), "")
+        if not key:
+            return None
+        import io, wave
+        wav_buf = io.BytesIO()
+        try:
+            with wave.open(wav_buf, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(int(self.cfg["stt"].get("sample_rate", 16000)))
+                wf.writeframes(audio)
+            wav_bytes = wav_buf.getvalue()
+        except Exception as exc:
+            print(f"Soniox STT wave format error: {exc}", flush=True)
+            return None
+
+        model = soniox_cfg.get("model", "stt-rt-v5")
+        target_lang = language if language is not None else (soniox_cfg.get("language") or self.cfg["stt"].get("language", "fa"))
+        lang_hints = [target_lang] if (target_lang and target_lang != "auto") else ["fa", "en"]
+
+        ctx_cfg = self.cfg["stt"].get("context_terms") or {}
+        context = {}
+        if ctx_cfg.get("terms"):
+            context["terms"] = ctx_cfg["terms"]
+        if ctx_cfg.get("domain") or ctx_cfg.get("topic"):
+            context["general"] = []
+            if ctx_cfg.get("domain"):
+                context["general"].append({"key": "domain", "value": ctx_cfg["domain"]})
+            if ctx_cfg.get("topic"):
+                context["general"].append({"key": "topic", "value": ctx_cfg["topic"]})
+
+        headers = {"Authorization": f"Bearer {key}"}
+        files = {"file": ("audio.wav", wav_bytes, "audio/wav")}
+        data = {
+            "model": model,
+            "language_hints": json.dumps(lang_hints),
+        }
+        if context:
+            data["context"] = json.dumps(context)
+
+        timeout = float(soniox_cfg.get("timeout", 10))
+        proxies = {}
+        proxy = os.environ.get("ALL_PROXY") or os.environ.get("HTTPS_PROXY")
+        if proxy:
+            proxies = {"http": proxy, "https": proxy}
+
+        try:
+            r = requests.post(
+                "https://api.soniox.com/v1/transcribe",
+                headers=headers,
+                files=files,
+                data=data,
+                proxies=proxies,
+                timeout=timeout,
+            )
+            if r.ok:
+                res = r.json()
+                text = (res.get("text") or res.get("transcript") or "").strip()
+                return text
+            print(f"Soniox STT error {r.status_code}: {r.text[:200]}", flush=True)
+        except Exception as exc:
+            print(f"Soniox STT request failed: {exc}", flush=True)
+        return None
 
     def _remote_stt(self, audio: bytes, remote: dict) -> str | None:
         """POST raw PCM to the GPU STT worker. None = unavailable (use fallback)."""
@@ -762,6 +879,10 @@ class VoicePipelineServer:
             yield from self._gemini_tts_chunks_sync(text, timing, voice)
             return
 
+        if provider == "soniox":
+            yield from self._soniox_tts_chunks_sync(text, timing, voice)
+            return
+
         if provider == "edge_tts":
             yield from self._edge_tts_chunks_sync(text, timing, voice)
             return
@@ -812,6 +933,85 @@ class VoicePipelineServer:
         finally:
             response.close()  # barge-in cancels mid-stream; don't leak the connection
 
+    def _soniox_tts_chunks_sync(self, text: str, timing: TurnTiming, voice: dict) -> Iterator[bytes]:
+        soniox_cfg = voice.get("soniox") or {}
+        key = os.environ.get(soniox_cfg.get("api_key_env", "SONIOX_API_KEY"), "")
+        if not key:
+            print("Soniox API key not found. Falling back to Gemini TTS...", flush=True)
+            yield from self._gemini_tts_chunks_sync(text, timing, voice)
+            return
+
+        model = soniox_cfg.get("model", "tts-rt-v2")
+        voice_name = soniox_cfg.get("voice_name") or voice.get("voice_name", "Adrian")
+        timing.tts_model = f"soniox:{model}"
+        timing.voice_id = voice_name
+        timing.tts_request_start_monotonic = timing.tts_request_start_monotonic or time.perf_counter()
+        record_usage(tts_chars=len(text))
+
+        payload = {
+            "text": text.strip(),
+            "model": model,
+            "voice": voice_name,
+            "output_format": "pcm_16000",
+        }
+        headers = {
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json"
+        }
+        proxies = {}
+        proxy = os.environ.get("ALL_PROXY") or os.environ.get("HTTPS_PROXY")
+        if proxy:
+            proxies = {"http": proxy, "https": proxy}
+
+        try:
+            r = requests.post(
+                "https://api.soniox.com/v1/synthesize",
+                headers=headers,
+                json=payload,
+                proxies=proxies,
+                timeout=15,
+                stream=True,
+            )
+            if r.ok:
+                for chunk in r.iter_content(chunk_size=4096):
+                    if chunk:
+                        if timing.first_tts_audio_byte_monotonic is None:
+                            timing.first_tts_audio_byte_monotonic = time.perf_counter()
+                        yield chunk
+                return
+            print(f"Soniox TTS error {r.status_code}: {r.text[:200]}. Falling back to Gemini TTS...", flush=True)
+        except Exception as exc:
+            print(f"Soniox TTS request failed: {exc}. Falling back to Gemini TTS...", flush=True)
+
+        yield from self._gemini_tts_chunks_sync(text, timing, voice)
+
+    @classmethod
+    def _get_tool_filler(cls, tool_name: str, language: str | None = None) -> str:
+        lang = (language or "fa").lower()
+        if lang == "fa":
+            if tool_name in ("web_search", "web_extract", "browser_exec"):
+                return "در حال جستجو در اینترنت..."
+            elif tool_name in ("terminal", "execute_code"):
+                return "در حال اجرای دستور..."
+            elif tool_name in ("skill_view", "toolset"):
+                return "در حال بررسی..."
+            return "یک لحظه بررسی می‌کنم..."
+        elif lang in ("en", "auto"):
+            if tool_name in ("web_search", "web_extract", "browser_exec"):
+                return "Searching the web..."
+            elif tool_name in ("terminal", "execute_code"):
+                return "Running that command now..."
+            return "Let me check that..."
+        elif lang == "es":
+            return "Un momento, estoy consultando..."
+        elif lang == "fr":
+            return "Un instant, je vérifie..."
+        elif lang == "de":
+            return "Einen Moment, ich prüfe das..."
+        elif lang == "ar":
+            return "لحظة واحدة، جاري الفحص..."
+        return "یک لحظه بررسی می‌کنم..."
+
     # ------------------------------------------------------------- Turn flow
 
     async def stream_response_audio(
@@ -848,9 +1048,20 @@ class VoicePipelineServer:
                     continue
                 if kind == "tool":
                     info = json.loads(value)
-                    timing.tools_used.append(info.get("name", "tool"))
+                    tool_name = info.get("name", "tool")
+                    timing.tools_used.append(tool_name)
                     await ws.send_json({"type": "agent_status", "state": "tool_use",
-                                        "tool": info.get("name"), "preview": info.get("preview", "")})
+                                        "tool": tool_name, "preview": info.get("preview", "")})
+                    # Audible Filler: speak instant natural filler on the first tool call of the turn
+                    if (self.cfg.get("hermes") or {}).get("audible_fillers", True) and not conn.tool_filler_spoken and not spoken:
+                        conn.tool_filler_spoken = True
+                        filler = self._get_tool_filler(tool_name, conn.language)
+                        if filler:
+                            await ws.send_json({"type": "agent_status", "state": "speaking"})
+                            conn.spoken_sentences.append(filler)
+                            await self._send_tts_sentence(ws, filler, timing, language=conn.language)
+                            await ws.send_json({"type": "agent_status", "state": "tool_use",
+                                                "tool": tool_name, "preview": info.get("preview", "")})
                     continue
                 if kind == "approval":
                     await ws.send_json({"type": "approval_request", "data": json.loads(value),
@@ -1434,6 +1645,7 @@ class ConnState:
     last_partial_bytes: int = 0
     language: str | None = None
     last_spoken_response: str = ""
+    tool_filler_spoken: bool = False
 
 
 async def _run_turn(ws: WebSocket, pipeline: VoicePipelineServer, conn: ConnState) -> None:
@@ -1569,6 +1781,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                         conn.language = event.get("language")
                     conn.audio_chunks = []
                     conn.last_partial_bytes = 0
+                    conn.tool_filler_spoken = False
                     conn.recording = True
                     conn.timing = TurnTiming(turn_id=pipeline.next_turn_id())
                     conn.timing.audio_start_monotonic = time.perf_counter()

@@ -511,13 +511,15 @@ registerProcessor("pcm16k",PCM16K);`;
             if (JarvisCore.level < 0.038) {
               JarvisCore.consecutiveSilenceMs += 80;
               // Dynamic silence threshold:
-              // 650ms for normal sentences (fast, crisp turn completion).
-              // Extended to 1100ms if user paused mid-sentence on conjunctions / fillers ("و", "یا", "که", "چون", "and", "or", etc.).
+              // - 1100ms if user paused mid-sentence on conjunctions / fillers ("و", "یا", "که", "چون", "and", "or", etc.).
+              // - 350ms (Semantic End-of-Turn) if transcript ends in complete punctuation or terminal verb/question clause.
+              // - 650ms standard conversational turn gap.
               const txt = JarvisCore.lastPartialTranscript || "";
               const isMidSentence = /(?:^|\s)(?:و|یا|که|چون|چونکه|اما|ولی|اگر|مثلاً|یعنی|and|or|because|but|so|if|like|um|uh)[\s,،]*$/i.test(txt);
-              const dynamicThreshold = isMidSentence ? 1100 : 650;
-              if (JarvisCore.consecutiveSilenceMs >= dynamicThreshold && (now - JarvisCore.speechStartTime) >= 450) {
-                console.log(`Silence detected (${dynamicThreshold}ms, midSentence=${isMidSentence}) -> auto-submitting turn`);
+              const isCompleteSentence = /[\.\?!؟!\s]*[\.\?!؟]$/.test(txt) || /(?:^|\s)(?:چنده|کجاست|کیه|چیه|چیست|کیست|بگو|کن|کنید|بده|بشمار|بخون|داری|نداری|نیست|هست|است|میخوام|می‌خوام)[\s\.,،?!؟]*$/i.test(txt);
+              const dynamicThreshold = isMidSentence ? 1100 : (isCompleteSentence ? 350 : 650);
+              if (JarvisCore.consecutiveSilenceMs >= dynamicThreshold && (now - JarvisCore.speechStartTime) >= 400) {
+                console.log(`Silence detected (${dynamicThreshold}ms, semanticEOT=${isCompleteSentence}, midSentence=${isMidSentence}) -> auto-submitting turn`);
                 playChime("send");
                 JarvisCore.stopTalk("silence");
               }
