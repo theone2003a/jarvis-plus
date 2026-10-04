@@ -17,17 +17,17 @@
           <header class="ae-topbar">
             <div class="ae-brand">
               <span class="ae-logo-dot"></span>
-              <span>AETHERIA // JARVIS</span>
+              <span class="ae-brand-title">AETHERIA</span><span class="ae-brand-sub"> // JARVIS</span>
             </div>
             <div class="ae-status-pill">
               <span class="ae-pulse-dot"></span>
-              <span id="ae-conn-badge">LIVE : 8766</span>
+              <span id="ae-conn-badge">LIVE<span class="ae-port-text"> : 8766</span></span>
             </div>
             <div class="ae-topbar-actions">
               <div class="ae-top-clock" id="ae-clock">--:--:--</div>
               <div id="template-switcher-slot"></div>
               <button class="ae-btn-icon" id="ae-inspector-btn" title="System Telemetry & Tools">
-                📊 <span data-i18n="inspector">INSPECTOR</span>
+                <span>📊</span> <span class="ae-btn-label" data-i18n="inspector">INSPECTOR</span>
               </button>
             </div>
           </header>
@@ -51,7 +51,7 @@
             <div class="ae-sub-card" id="ae-sub-card">
               <div class="ae-sub-text" id="ae-sub-text" data-i18n="subtitle_default">Click the mic or press Space to speak</div>
               <div class="ae-sub-meta">
-                <span id="ae-sub-engine">GEMINI FLASH LITE</span>
+                <span id="ae-sub-engine">READY</span>
                 <div class="ae-eq-bar">
                   <span></span><span></span><span></span><span></span>
                 </div>
@@ -293,6 +293,7 @@
 
       // Drawer open/close
       const openDrawer = () => {
+        AetheriaTemplate.renderDrawerContent();
         drawer.classList.add("open");
         drawerBackdrop.classList.add("open");
       };
@@ -393,9 +394,11 @@
         chatSend.textContent = t("send", "SEND");
         if (modalInp) modalInp.placeholder = t("input_placeholder", "Ask or speak to Jarvis... (Space to talk)");
         if (modalSend) modalSend.textContent = t("send", "SEND");
-        drawerBtn.querySelector("span").textContent = t("inspector", "INSPECTOR");
+        const inspLabel = drawerBtn.querySelector(".ae-btn-label");
+        if (inspLabel) inspLabel.textContent = t("inspector", "INSPECTOR");
         feedToggle.querySelector("span").textContent = t("chat", "CHAT");
         stopBtn.querySelector("span").textContent = t("stop", "STOP");
+        AetheriaTemplate.renderDrawerContent();
       });
 
       // Partial live subtitle
@@ -410,7 +413,23 @@
       let totalMessages = 0;
       core.on("transcript", msg => {
         document.getElementById("ae-sub-text").textContent = msg.text;
-        document.getElementById("ae-sub-engine").textContent = msg.isUser ? "USER SPEECH" : "GEMINI FLASH LITE (KORE)";
+        if (msg.isUser) {
+          document.getElementById("ae-sub-engine").textContent = "USER SPEECH";
+        } else {
+          let ttsLabel = "GEMINI FLASH LITE (KORE)";
+          const tm = msg.tts_model || (core.lastTiming && core.lastTiming.tts_model);
+          const vid = msg.voice_id || (core.lastTiming && core.lastTiming.voice_id);
+          if (tm === "edge-tts") {
+            ttsLabel = `EDGE-TTS (${vid || "FARID"})`.toUpperCase();
+          } else if (tm && tm.includes("gemini")) {
+            ttsLabel = `GEMINI TTS (${vid || "KORE"})`.toUpperCase();
+          } else if (tm && tm.includes("soniox")) {
+            ttsLabel = `SONIOX TTS (${vid || "ADRIAN"})`.toUpperCase();
+          } else if (tm) {
+            ttsLabel = `${tm.toUpperCase()} (${vid || ""})`.trim();
+          }
+          document.getElementById("ae-sub-engine").textContent = ttsLabel;
+        }
 
         totalMessages++;
         if (chatCount) chatCount.textContent = `${totalMessages} message${totalMessages > 1 ? "s" : ""}`;
@@ -438,41 +457,56 @@
       const body = document.getElementById("ae-drawer-body");
       if (!body) return;
       const core = window.JarvisCore;
+      const t = (k, fb) => (window.I18n ? window.I18n.t(k) : fb);
+
+      let sttName = (core && core.lastTiming && core.lastTiming.stt_model) || "Groq Whisper Large V3 (fa)";
+      let ttsName = "Gemini Flash Lite (Kore)";
+      if (core && core.lastTiming && core.lastTiming.tts_model) {
+        if (core.lastTiming.tts_model === "edge-tts") {
+          ttsName = `Microsoft Edge-TTS (${core.lastTiming.voice_id || "fa-IR-FaridNeural"})`;
+        } else if (core.lastTiming.tts_model.includes("gemini")) {
+          ttsName = `Gemini Flash Lite (${core.lastTiming.voice_id || "Kore"})`;
+        } else if (core.lastTiming.tts_model.includes("soniox")) {
+          ttsName = `Soniox TTS (${core.lastTiming.voice_id || "Adrian"})`;
+        } else {
+          ttsName = `${core.lastTiming.tts_model} (${core.lastTiming.voice_id || ""})`;
+        }
+      }
 
       if (this.drawerTab === "telemetry") {
         body.innerHTML = `
           <div class="ae-metric-card">
-            <h4>Neural Pipeline</h4>
-            <div class="ae-kv"><span>STT Provider</span><b>Groq Whisper Large V3 (fa)</b></div>
-            <div class="ae-kv"><span>TTS Model</span><b>Gemini Flash Lite (Kore)</b></div>
-            <div class="ae-kv"><span>Brain</span><b>Hermes 9Router Agent</b></div>
-            <div class="ae-kv"><span>Sample Rate</span><b>16 kHz PCM S16LE</b></div>
+            <h4>${t("neural_pipeline", "NEURAL PIPELINE")}</h4>
+            <div class="ae-kv"><span>${t("stt_provider", "STT Provider")}</span><b dir="ltr">${sttName}</b></div>
+            <div class="ae-kv"><span>${t("tts_model", "TTS Model")}</span><b dir="ltr">${ttsName}</b></div>
+            <div class="ae-kv"><span>${t("brain", "Brain")}</span><b dir="ltr">Hermes 9Router Agent</b></div>
+            <div class="ae-kv"><span>${t("sample_rate", "Sample Rate")}</span><b dir="ltr">16 kHz PCM S16LE</b></div>
           </div>
           <div class="ae-metric-card">
-            <h4>Usage & Metrics</h4>
-            <div class="ae-kv"><span>Total Turns</span><b id="ae-d-turns">${core ? core.turns : 0}</b></div>
-            <div class="ae-kv"><span>Tokens Today</span><b id="ae-d-tok">—</b></div>
-            <div class="ae-kv"><span>TTS Chars</span><b id="ae-d-tts">—</b></div>
-            <div class="ae-kv"><span>Socket Link</span><b style="color:var(--ae-cyan)">ONLINE</b></div>
+            <h4>${t("usage_metrics", "USAGE & METRICS")}</h4>
+            <div class="ae-kv"><span>${t("total_turns", "Total Turns")}</span><b id="ae-d-turns" dir="ltr">${core ? core.turns : 0}</b></div>
+            <div class="ae-kv"><span>${t("tokens_today", "Tokens Today")}</span><b id="ae-d-tok" dir="ltr">—</b></div>
+            <div class="ae-kv"><span>${t("tts_chars", "TTS Chars")}</span><b id="ae-d-tts" dir="ltr">—</b></div>
+            <div class="ae-kv"><span>${t("socket_link", "Socket Link")}</span><b style="color:var(--ae-cyan)">${t("online", "ONLINE")}</b></div>
           </div>
         `;
       } else if (this.drawerTab === "activity") {
         body.innerHTML = `
           <div class="ae-metric-card">
-            <h4>Agent Execution Log</h4>
+            <h4>${t("agent_log", "AGENT EXECUTION LOG")}</h4>
             <div id="ae-activity-list" style="font-size:12px; color:var(--ae-txt-dim)">
-              <div>— No recent background tool execution —</div>
+              <div>${t("no_activity", "— No recent background tool execution —")}</div>
             </div>
           </div>
         `;
       } else if (this.drawerTab === "views") {
         body.innerHTML = `
           <div class="ae-metric-card">
-            <h4>Workspace Frames</h4>
+            <h4>${t("workspace_frames", "WORKSPACE FRAMES")}</h4>
             <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px">
-              <button class="ae-dock-btn" style="width:100%; justify-content:center" onclick="window.open('/kanban','_blank')">▸ OPEN KANBAN</button>
-              <button class="ae-dock-btn" style="width:100%; justify-content:center" onclick="window.open('/','_blank')">▸ HERMES DASHBOARD</button>
-              <button class="ae-dock-btn" style="width:100%; justify-content:center" onclick="window.open('/chat','_blank')">▸ CHAT INTERFACE</button>
+              <button class="ae-dock-btn" style="width:100%; justify-content:center" onclick="window.open('/kanban','_blank')">▸ ${t("open_kanban", "OPEN KANBAN")}</button>
+              <button class="ae-dock-btn" style="width:100%; justify-content:center" onclick="window.open('/','_blank')">▸ ${t("hermes_dashboard", "HERMES DASHBOARD")}</button>
+              <button class="ae-dock-btn" style="width:100%; justify-content:center" onclick="window.open('/chat','_blank')">▸ ${t("chat_interface", "CHAT INTERFACE")}</button>
             </div>
           </div>
         `;

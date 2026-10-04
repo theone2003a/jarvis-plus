@@ -179,6 +179,24 @@ class TurnTiming:
         return round(end - start, 4)
 
 
+def robust_request(method: str, url: str, **kwargs) -> requests.Response:
+    """Execute an HTTP request attempting direct connection first, falling back to proxy if direct fails."""
+    proxy = os.environ.get("ALL_PROXY") or os.environ.get("HTTPS_PROXY")
+    try:
+        s = requests.Session()
+        s.trust_env = False
+        return s.request(method, url, **kwargs)
+    except (requests.exceptions.ConnectionError, requests.exceptions.ConnectTimeout) as exc:
+        if proxy:
+            proxies = {"http": proxy, "https": proxy}
+            return requests.request(method, url, proxies=proxies, **kwargs)
+        raise exc
+
+
+def robust_post(url: str, **kwargs) -> requests.Response:
+    return robust_request("POST", url, **kwargs)
+
+
 # ===================================================================== Hermes
 
 
@@ -517,10 +535,6 @@ class VoicePipelineServer:
         elif terms_str:
             data["prompt"] = f"Voice conversation keywords: {terms_str}."
 
-        proxies = {}
-        proxy = os.environ.get("ALL_PROXY") or os.environ.get("HTTPS_PROXY")
-        if proxy:
-            proxies = {"http": proxy, "https": proxy}
         # On 429 retry with the alternate model (large-v3 ↔ turbo) after waiting retry-after seconds.
         retry_models = [model, "whisper-large-v3-turbo" if model == "whisper-large-v3" else "whisper-large-v3"]
         timeout = float(groq_cfg.get("timeout", 8))
@@ -528,12 +542,11 @@ class VoicePipelineServer:
             data["model"] = attempt_model
             files_attempt = {"file": ("audio.wav", wav_bytes, "audio/wav")}
             try:
-                r = requests.post(
+                r = robust_post(
                     "https://api.groq.com/openai/v1/audio/transcriptions",
                     headers=headers,
                     files=files_attempt,
                     data=data,
-                    proxies=proxies,
                     timeout=timeout,
                 )
                 if r.ok:
@@ -597,18 +610,12 @@ class VoicePipelineServer:
             data["context"] = json.dumps(context)
 
         timeout = float(soniox_cfg.get("timeout", 10))
-        proxies = {}
-        proxy = os.environ.get("ALL_PROXY") or os.environ.get("HTTPS_PROXY")
-        if proxy:
-            proxies = {"http": proxy, "https": proxy}
-
         try:
-            r = requests.post(
+            r = robust_post(
                 "https://api.soniox.com/v1/transcribe",
                 headers=headers,
                 files=files,
                 data=data,
-                proxies=proxies,
                 timeout=timeout,
             )
             if r.ok:
@@ -804,16 +811,11 @@ class VoicePipelineServer:
             }
         }
 
-        proxies = {}
-        proxy = os.environ.get("ALL_PROXY") or os.environ.get("HTTPS_PROXY")
-        if proxy:
-            proxies = {"http": proxy, "https": proxy}
-
         audio_bytes: bytes | None = None
         for m in models_to_try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={key}"
             try:
-                r = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, proxies=proxies, timeout=20)
+                r = robust_post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=4.5)
                 if r.ok:
                     res = r.json()
                     candidates = res.get("candidates", [])
@@ -826,9 +828,13 @@ class VoicePipelineServer:
                                 break
                     if audio_bytes:
                         break
+                if r.status_code == 429:
+                    print(f"Gemini TTS quota exceeded (429) on {m}. Falling back immediately to Edge-TTS...", flush=True)
+                    break
                 print(f"Gemini TTS ({m}) returned {r.status_code}: {r.text[:200]}", flush=True)
             except Exception as exc:
-                print(f"Gemini TTS ({m}) error: {exc}", flush=True)
+                print(f"Gemini TTS ({m}) error or timeout: {exc}. Falling back to Edge-TTS...", flush=True)
+                break
 
         if not audio_bytes:
             print("Gemini TTS unavailable or quota exceeded. Falling back to native Persian Edge-TTS...", flush=True)
@@ -905,15 +911,10 @@ class VoicePipelineServer:
             "model_id": voice.get("model", "eleven_multilingual_v2"),
             "voice_settings": settings,
         }
-        proxies = {}
-        proxy = os.environ.get("ALL_PROXY") or os.environ.get("HTTPS_PROXY")
-        if proxy:
-            proxies = {"http": proxy, "https": proxy}
-
-        response = requests.post(
+        response = robust_post(
             url, params=params,
             headers={"xi-api-key": key, "Accept": "application/octet-stream", "Content-Type": "application/json"},
-            json=payload, proxies=proxies, stream=True, timeout=120,
+            json=payload, stream=True, timeout=120,
         )
         if response.status_code >= 400:
             err_text = response.text[:1000]
@@ -958,17 +959,11 @@ class VoicePipelineServer:
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json"
         }
-        proxies = {}
-        proxy = os.environ.get("ALL_PROXY") or os.environ.get("HTTPS_PROXY")
-        if proxy:
-            proxies = {"http": proxy, "https": proxy}
-
         try:
-            r = requests.post(
+            r = robust_post(
                 "https://api.soniox.com/v1/synthesize",
                 headers=headers,
                 json=payload,
-                proxies=proxies,
                 timeout=15,
                 stream=True,
             )
@@ -1077,7 +1072,7 @@ class VoicePipelineServer:
                 sentences, pending = self._extract_complete_sentences(pending)
                 for sentence in sentences:
                     clean = self._clean_for_tts(sentence)
-                    if not clean:
+                    if not clean or self._is_duplicate_sentence(clean, conn.spoken_sentences):
                         continue
                     if timing.first_sentence_monotonic is None:
                         timing.first_sentence_monotonic = time.perf_counter()
@@ -1087,7 +1082,7 @@ class VoicePipelineServer:
                     conn.spoken_sentences.append(clean)
                     await self._send_tts_sentence(ws, clean, timing, language=conn.language)
             tail = self._clean_for_tts(pending.strip())
-            if tail:
+            if tail and not self._is_duplicate_sentence(tail, conn.spoken_sentences):
                 conn.spoken_sentences.append(tail)
                 await self._send_tts_sentence(ws, tail, timing, language=conn.language)
         finally:
@@ -1151,6 +1146,27 @@ class VoicePipelineServer:
             sentences.append(match.group(1).strip())
             last_end = match.end()
         return sentences, text[last_end:]
+
+    @staticmethod
+    def _is_duplicate_sentence(candidate: str, spoken_list: list[str]) -> bool:
+        if not candidate:
+            return True
+        c_clean = re.sub(r"[^\w\s]", "", candidate).strip().lower()
+        if not c_clean:
+            return True
+        c_words = set(c_clean.split())
+        for s in spoken_list:
+            s_clean = re.sub(r"[^\w\s]", "", s).strip().lower()
+            if not s_clean:
+                continue
+            if c_clean == s_clean or (len(c_clean) > 8 and c_clean in s_clean) or (len(s_clean) > 8 and s_clean in c_clean):
+                return True
+            s_words = set(s_clean.split())
+            if c_words and s_words:
+                overlap = len(c_words & s_words) / max(len(c_words), len(s_words))
+                if overlap >= 0.70:
+                    return True
+        return False
 
     @staticmethod
     def _clean_for_tts(text: str) -> str:
@@ -1407,8 +1423,8 @@ async def usage() -> JSONResponse:
 
             def fetch() -> dict | None:
                 try:
-                    r = requests.get("https://api.elevenlabs.io/v1/user/subscription",
-                                     headers={"xi-api-key": key}, timeout=10)
+                    r = robust_request("GET", "https://api.elevenlabs.io/v1/user/subscription",
+                                       headers={"xi-api-key": key}, timeout=10)
                     if r.ok:
                         j = r.json()
                         return {

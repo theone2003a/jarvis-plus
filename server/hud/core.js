@@ -305,16 +305,23 @@
         JarvisCore.serverTurnActive = false;
         const tm = e.timing || {};
         JarvisCore.turns++;
+        JarvisCore.lastTiming = tm;
         JarvisCore.emit("metrics_turn", {
           turns: JarvisCore.turns,
           timing: tm,
           stt_model: tm.stt_model,
           tts_model: tm.tts_model,
+          voice_id: tm.voice_id,
           llm_provider: tm.llm_provider,
           response_text: tm.response_text
         });
         if (tm.response_text) {
-          JarvisCore.emit("transcript", { text: tm.response_text, isUser: false });
+          JarvisCore.emit("transcript", {
+            text: tm.response_text,
+            isUser: false,
+            tts_model: tm.tts_model,
+            voice_id: tm.voice_id
+          });
         }
         if (activeSources.length === 0) {
           onPlaybackEnded();
@@ -343,26 +350,51 @@
 
       recognition.onresult = event => {
         if (!JarvisCore.handsFree || JarvisCore.capturing) return;
-        if (Date.now() - wakeLastFiredAt < 2000) return;
+        if (Date.now() - wakeLastFiredAt < 1500) return;
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           const res = event.results[i];
           for (let j = 0; j < res.length; ++j) {
             const phrase = (res[j].transcript || "").toLowerCase().trim();
-            if (
+            const isWake = (
               phrase.includes("jarvis") ||
               phrase.includes("جارویس") ||
               phrase.includes("هی جارویس") ||
               phrase.includes("hey jarvis") ||
               phrase.includes("hi jarvis")
-            ) {
+            );
+            const isStop = (
+              phrase.includes("stop") ||
+              phrase.includes("استپ") ||
+              phrase.includes("کافیه") ||
+              phrase.includes("کنسل") ||
+              phrase.includes("وایسا") ||
+              phrase.includes("صبر کن") ||
+              phrase.includes("بس کن") ||
+              phrase.includes("cancel")
+            );
+
+            if (isStop && (JarvisCore.serverTurnActive || activeSources.length > 0)) {
+              console.log("Stop phrase triggered:", phrase);
+              wakeLastFiredAt = Date.now();
+              JarvisCore.stopRun();
+              playChime("send");
+              return;
+            }
+
+            if (isWake) {
               console.log("Wake word triggered:", phrase);
               wakeLastFiredAt = Date.now();
               stopWakeListening();
+              stopPlayback();
+              if (JarvisCore.serverTurnActive && JarvisCore.wsReady) {
+                ws.send(JSON.stringify({ type: "stop_run" }));
+                JarvisCore.serverTurnActive = false;
+              }
               playChime("wake");
               JarvisCore.setState("listening", "WAKE DETECTED!", "START TALKING NOW...");
               setTimeout(() => {
                 if (!JarvisCore.capturing) JarvisCore.startTalk();
-              }, 320);
+              }, 250);
               return;
             }
           }
@@ -381,9 +413,9 @@
 
       recognition.onend = () => {
         JarvisCore.wakeActive = false;
-        if (JarvisCore.handsFree && !JarvisCore.capturing && JarvisCore.state !== "speaking") {
+        if (JarvisCore.handsFree && !JarvisCore.capturing) {
           const msSinceWake = Date.now() - wakeLastFiredAt;
-          const restartDelay = msSinceWake < 2000 ? (2000 - msSinceWake) : 400;
+          const restartDelay = msSinceWake < 1500 ? (1500 - msSinceWake) : 250;
           clearTimeout(wakeRestartTimer);
           wakeRestartTimer = setTimeout(() => {
             startWakeListening();
@@ -398,7 +430,7 @@
   }
 
   function startWakeListening() {
-    if (!JarvisCore.handsFree || JarvisCore.capturing || JarvisCore.state === "speaking") return;
+    if (!JarvisCore.handsFree || JarvisCore.capturing) return;
     if (!recognition && !initWakeEngine()) return;
     if (!JarvisCore.wakeActive) {
       try {
@@ -490,6 +522,21 @@ registerProcessor("pcm16k",PCM16K);`;
         for (let i = 0; i < a.length; i += 8) s += Math.abs(a[i]);
         JarvisCore.level = Math.min(1, (s / (a.length / 8)) / 9000);
         JarvisCore.emit("level", JarvisCore.level);
+
+        // Acoustic Barge-in VAD during active speaker playback:
+        if (!JarvisCore.capturing && activeSources.length > 0 && JarvisCore.handsFree) {
+          if (JarvisCore.level > 0.088) {
+            JarvisCore.bargeInVoiceMs = (JarvisCore.bargeInVoiceMs || 0) + 80;
+            if (JarvisCore.bargeInVoiceMs >= 240) {
+              console.log("Acoustic barge-in detected during playback!");
+              JarvisCore.bargeInVoiceMs = 0;
+              JarvisCore.bargeIn();
+              return;
+            }
+          } else {
+            JarvisCore.bargeInVoiceMs = 0;
+          }
+        }
 
         // VAD
         if (JarvisCore.capturing && activeSources.length === 0) {
@@ -605,13 +652,34 @@ registerProcessor("pcm16k",PCM16K);`;
     this.serverTurnActive = true;
     if (this.wsReady) ws.send(JSON.stringify({ type: "stop" }));
     this.setState("thinking", "PROCESSING");
+    if (this.handsFree) {
+      setTimeout(() => {
+        if (this.handsFree && !this.capturing) startWakeListening();
+      }, 350);
+    }
+  };
+
+  JarvisCore.bargeIn = function() {
+    console.log("Barge-in: interrupting speech/tool execution");
+    stopPlayback();
+    this.emit("partial", "");
+    if (this.serverTurnActive && this.wsReady) {
+      ws.send(JSON.stringify({ type: "stop_run" }));
+      this.serverTurnActive = false;
+    }
+    playChime("wake");
+    this.startTalk();
   };
 
   JarvisCore.toggleTalk = function() {
     if (this.capturing) {
       this.stopTalk("manual");
     } else {
-      this.startTalk();
+      if (this.serverTurnActive || activeSources.length > 0) {
+        this.bargeIn();
+      } else {
+        this.startTalk();
+      }
     }
   };
 

@@ -120,21 +120,20 @@ html, body {
   flex-direction: row-reverse;
   font-family: 'Vazirmatn', sans-serif;
 }
-[dir="rtl"] .ae-topbar-actions,
-[dir="rtl"] .ic-topbar-right {
-  flex-direction: row-reverse;
-}
 
 @media (max-width: 768px) {
   .hud-controls-cluster {
-    gap: 4px;
-  }
-  .tmpl-btn {
-    padding: 4px 7px;
-    font-size: 10px;
     gap: 3px;
   }
+  .tmpl-btn {
+    padding: 3px 6px;
+    font-size: 10px;
+    gap: 2px;
+  }
   .tmpl-btn .btn-long-label {
+    display: none;
+  }
+  .stt-prefix {
     display: none;
   }
 }
@@ -305,7 +304,7 @@ html, body {
         <div class="tmpl-selector">
           <button class="tmpl-btn" id="stt-btn" title="${i18n.t('stt_mode') || 'Whisper STT'}">
             <span>🎙️</span>
-            <span>STT:${curSttLabel}</span>
+            <span><span class="stt-prefix">STT:</span>${curSttLabel}</span>
             <span>▾</span>
           </button>
           <div class="tmpl-dropdown" id="stt-dropdown">

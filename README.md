@@ -34,14 +34,15 @@ The HUD around the ring is a real control center:
   - **Omni**: ChatGPT Advanced Voice Mode style with organic deformable white/blue audio blob.
   - **Astra**: Google Gemini Live style with shimmering multi-bar neural waveforms and Google starlight gradients.
 - **Hands-Free Mode** — wake words `"Hey Jarvis"` and `"جارویس"` with continuous follow-up conversation and 2.0s silence auto-send.
-- **Persian & English Native Support** — Groq Whisper Large V3 STT locked to `fa` and Google Gemini Flash Lite TTS (`Kore`) with Edge-TTS automatic fallback.
+- **9-Language Internationalization (i18n)** — full interface & System Inspector localization across English, Persian (فارسی), Spanish, French, German, Arabic (العربية), Chinese (中文), Russian, and Japanese with automatic RTL/LTR document layout.
+- **Dynamic Whisper STT Language Mode** — on-the-fly voice recognition language switching (14 supported languages with auto-detect).
+- **Persian & Multilingual TTS Stack** — Google Gemini Flash Lite TTS (`Kore`) with fail-fast fallback to Microsoft Edge-TTS (`fa-IR-FaridNeural`) and Soniox RT streaming.
 - **Live agent activity** — watch tool calls happen with command previews
-- **STOP button** — halt a runaway agent turn mid-tool-call (Esc works too)
+- **STOP button & Full Barge-In** — halt agent turns mid-execution (speech barge-in, wake-word interrupt, stop phrases, or Space/click)
 - **Approval cards** — dangerous commands pause for your ALLOW/DENY
-- **Interrupt-aware barge-in** — cut it off mid-sentence; it knows exactly what you heard and what you didn't
-- **Embedded dashboards** — Hermes' kanban board and session browser pop up in animated viewers
+- **Embedded dashboards** — Hermes' kanban board, session browser, and chat interface in animated viewers
 - **Holographic media panels** — fly-in panels from Z-depth with scanline sweeps
-- **Mobile-First Responsive** — `100dvh` layout, safe-area insets, thumb-reach floating dock, zero horizontal scroll.
+- **Mobile-First Responsive Overhaul** — `100dvh` layout, compact top bar, dynamic reactor scaling, collision-free multi-line transcript scrolling, and non-clipping thumb dock for 360px–430px viewports.
 
 ## Architecture
 
