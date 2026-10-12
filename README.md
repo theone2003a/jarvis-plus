@@ -43,6 +43,47 @@ Talk to a **real autonomous agent** — one with persistent long-term memory, sh
 
 ---
 
+## 📸 Holographic HUD Interface Gallery
+
+J.A.R.V.I.S Plus features **5 distinct real-time visual interfaces** switchable with 1-click in the live HUD:
+
+| **Aetheria (Female AI / Default)** | **IronCore (Arc Reactor Mark VII)** |
+| :---: | :---: |
+| <img src="docs/screenshots/aetheria_desktop.png" width="480" alt="Aetheria HUD"> | <img src="docs/screenshots/ironcore_desktop.png" width="480" alt="IronCore Arc Reactor"> |
+| *Orbital sound rings, glass telemetry, responsive inspector* | *Tactical sci-fi reactor core, rotating mechanical rings* |
+
+| **Zenith (Apple Siri / Morphing Orb)** | **Omni (ChatGPT Voice Blob)** |
+| :---: | :---: |
+| <img src="docs/screenshots/zenith_desktop.png" width="480" alt="Zenith Siri Morph"> | <img src="docs/screenshots/omni_desktop.png" width="480" alt="Omni ChatGPT Style"> |
+| *Iridescent fluid color waves & glass bottom dock* | *Minimalist organic deformable audio blob* |
+
+| **Astra (Gemini Live Waves)** | **Mobile HUD (iPhone & Android 100dvh)** |
+| :---: | :---: |
+| <img src="docs/screenshots/astra_desktop.png" width="480" alt="Astra Gemini Waves"> | <img src="docs/screenshots/mobile_aetheria.png" width="300" alt="Mobile Aetheria HUD"> |
+| *Multi-bar neural shimmering cosmic waveforms* | *Touch-optimized dock, collision-free multi-line transcripts* |
+
+---
+
+## ⚡ Original Jarvis vs. J.A.R.V.I.S Plus Comparison
+
+How does **J.A.R.V.I.S Plus** compare to the baseline voice assistant project?
+
+| Feature / Capability | Baseline Jarvis | J.A.R.V.I.S Plus |
+| :--- | :--- | :--- |
+| **Holographic HUD Themes** | 1 static theme (ironcore only) | **5 switchable themes** (Aetheria, IronCore, Zenith, Omni, Astra) with 1-click live swapping |
+| **Language & RTL Support** | English only, LTR layout only | **9 UI languages** with full bidirectional RTL mirroring (Persian & Arabic) + isolated LTR telemetry |
+| **Speech-to-Text (STT) Selector** | Hardcoded language in `.env` | **Dynamic on-the-fly STT language switcher** (14 languages + auto-detect) directly in the HUD |
+| **Voice Barge-in & Interruption** | Voice/speech cannot interrupt tool runs | **Full-turn barge-in**: Say *"Stop"*, wake-words, or press Space to immediately kill runaway tools |
+| **LLM Thought Deduplication** | Speaks redundant reasoning repeats | **Semantic deduplication**: Intermediate reasoning statuses spoken at most once per turn |
+| **Whisper Hallucination Shield** | Hallucinates on silence (`[Music]`, `[Applause]`) | **Automatic hallucination filter** cleans silence artifacts, subtitle loops, and false triggers |
+| **Acoustic Feedback Loop Guard** | Mic picks up speaker voice in loop | **Adaptive silence & speech gating** prevents agent from self-triggering via laptop speakers |
+| **Mobile Experience** | Viewport overflows; buttons clipped | **Mobile-first `100dvh` layout** with auto-scaling centerpiece & responsive transcript drawer |
+| **TTS Engine Flexibility** | Proprietary paid TTS only | **100% Free Edge-TTS (native Persian Farid/Dilara) + Gemini TTS + ElevenLabs & Soniox paid** |
+| **System Diagnostics** | Raw console logs only | **Slide-over System Inspector** with live telemetry, audio waveforms, mic thresholds, and latency |
+| **Deployment Simplicity** | Manual environment setup | **1-Command `setup.sh` wizard** + turnkey Docker Compose with TLS certificate generation |
+
+---
+
 ## 📊 Supported Models Matrix (Free vs. Paid)
 
 J.A.R.V.I.S Plus is engineered to be **100% accessible out of the box with zero mandatory subscriptions**, while letting users plug in paid providers for studio-grade human realism.

@@ -17,7 +17,7 @@
           <header class="ae-topbar">
             <div class="ae-brand">
               <span class="ae-logo-dot"></span>
-              <span class="ae-brand-title">AETHERIA</span><span class="ae-brand-sub"> // JARVIS</span>
+              <span class="ae-brand-title">AETHERIA</span><span class="ae-brand-sub"> // JARVIS PLUS</span>
             </div>
             <div class="ae-status-pill">
               <span class="ae-pulse-dot"></span>

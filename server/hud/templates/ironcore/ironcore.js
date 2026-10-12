@@ -14,7 +14,7 @@
         <div id="ironcore-root">
           <!-- Top Bar -->
           <header class="ic-topbar">
-            <div class="ic-brand">J.A.R.V.I.S // MARK VII CORE</div>
+            <div class="ic-brand">J.A.R.V.I.S PLUS // MARK VII CORE</div>
             <div class="ic-topbar-right">
               <div class="ic-clock" id="ic-clock">--:--:--</div>
               <div id="template-switcher-slot"></div>

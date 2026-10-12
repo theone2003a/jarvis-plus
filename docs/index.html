@@ -466,6 +466,83 @@
     .pro-voice-text h4 { font-size: 16px; color: #fff; margin-bottom: 4px; }
     .pro-voice-text p { font-size: 13.5px; color: var(--txt-dim); margin: 0; }
 
+    /* Screenshot Gallery Cards */
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
+      margin-top: 36px;
+    }
+    .gallery-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      overflow: hidden;
+      backdrop-filter: blur(20px);
+      transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+      display: flex;
+      flex-direction: column;
+    }
+    .gallery-card:hover {
+      transform: translateY(-5px);
+      border-color: var(--lilac);
+      box-shadow: 0 16px 40px rgba(168, 85, 247, 0.2);
+    }
+    .gallery-img-box {
+      width: 100%;
+      background: #020205;
+      overflow: hidden;
+      position: relative;
+      border-bottom: 1px solid var(--border);
+    }
+    .gallery-img-box img {
+      width: 100%;
+      height: 220px;
+      object-fit: cover;
+      object-position: center top;
+      display: block;
+      transition: transform 0.4s ease;
+    }
+    .gallery-card:hover .gallery-img-box img {
+      transform: scale(1.03);
+    }
+    .gallery-meta {
+      padding: 20px;
+      flex: 1;
+    }
+    .gallery-meta h3 {
+      font-size: 18px;
+      margin-bottom: 6px;
+      color: #fff;
+    }
+    .gallery-meta p {
+      font-size: 13.5px;
+      color: var(--txt-dim);
+      margin: 0;
+      line-height: 1.5;
+    }
+    .gallery-tag {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 10px;
+      background: rgba(6, 182, 212, 0.12);
+      border: 1px solid rgba(6, 182, 212, 0.35);
+      color: var(--cyan);
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      margin-bottom: 10px;
+    }
+
+    /* Comparison Table Highlighting */
+    .table-plus-highlight {
+      background: rgba(168, 85, 247, 0.08) !important;
+      color: #e9d5ff !important;
+      font-weight: 500;
+    }
+    .baseline-col {
+      color: var(--txt-dim);
+    }
+
     /* Footer */
     footer {
       border-top: 1px solid var(--border);
@@ -487,6 +564,8 @@
         J.A.R.V.I.S PLUS
       </a>
       <div class="nav-links">
+        <a href="#screenshots">Screenshots</a>
+        <a href="#comparison">Comparison</a>
         <a href="#templates">HUD Themes</a>
         <a href="#languages">Languages</a>
         <a href="#models">Models Matrix</a>
@@ -545,6 +624,163 @@
         <div class="simulator-hint">
           ⚡ Tap the orb to trigger live state transitions & acoustic barge-in
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Live Screenshots Showcase Gallery -->
+  <section id="screenshots">
+    <div class="container">
+      <div class="section-head">
+        <h2>Live HUD Interface Gallery</h2>
+        <p>Unfiltered screenshots captured directly from active LAN browser sessions across all 5 themes and mobile view.</p>
+      </div>
+
+      <div class="gallery-grid">
+        <div class="gallery-card">
+          <div class="gallery-img-box">
+            <img src="screenshots/aetheria_desktop.png" alt="Aetheria Holographic HUD" loading="lazy">
+          </div>
+          <div class="gallery-meta">
+            <span class="gallery-tag">DEFAULT HUD</span>
+            <h3>✦ Aetheria Holographic</h3>
+            <p>Futuristic female AI assistant with rotating sound rings, slide-over telemetry inspector, floating dock, and bidirectional RTL mirroring.</p>
+          </div>
+        </div>
+
+        <div class="gallery-card">
+          <div class="gallery-img-box">
+            <img src="screenshots/ironcore_desktop.png" alt="IronCore Arc Reactor HUD" loading="lazy">
+          </div>
+          <div class="gallery-meta">
+            <span class="gallery-tag">SCI-FI CLASSIC</span>
+            <h3>⚙️ IronCore Arc Reactor</h3>
+            <p>Mark VII Iron Man power core with multi-segmented rotating mechanical rings, acoustic energy spikes, and tactical status readouts.</p>
+          </div>
+        </div>
+
+        <div class="gallery-card">
+          <div class="gallery-img-box">
+            <img src="screenshots/zenith_desktop.png" alt="Zenith Apple Siri Morphing HUD" loading="lazy">
+          </div>
+          <div class="gallery-meta">
+            <span class="gallery-tag">APPLE INTELLIGENCE</span>
+            <h3>🔮 Zenith Fluid Orb</h3>
+            <p>Siri & Apple Intelligence inspired fluid iridescent color waves that organically warp and pulse with speech amplitude.</p>
+          </div>
+        </div>
+
+        <div class="gallery-card">
+          <div class="gallery-img-box">
+            <img src="screenshots/omni_desktop.png" alt="Omni ChatGPT Style Voice HUD" loading="lazy">
+          </div>
+          <div class="gallery-meta">
+            <span class="gallery-tag">CHATGPT AVM</span>
+            <h3>💬 Omni Deformable Blob</h3>
+            <p>Minimalist organic audio blob inspired by ChatGPT Advanced Voice Mode with silky soft gradients and low visual distraction.</p>
+          </div>
+        </div>
+
+        <div class="gallery-card">
+          <div class="gallery-img-box">
+            <img src="screenshots/astra_desktop.png" alt="Astra Gemini Live HUD" loading="lazy">
+          </div>
+          <div class="gallery-meta">
+            <span class="gallery-tag">GEMINI LIVE</span>
+            <h3>✨ Astra Neural Waves</h3>
+            <p>Google Gemini Live style multi-bar reactive frequency spectrum with cosmic starlight sparkles and live amplitude bars.</p>
+          </div>
+        </div>
+
+        <div class="gallery-card">
+          <div class="gallery-img-box">
+            <img src="screenshots/mobile_aetheria.png" alt="Mobile Aetheria View on iPhone" loading="lazy">
+          </div>
+          <div class="gallery-meta">
+            <span class="gallery-tag">MOBILE-FIRST</span>
+            <h3>📱 iPhone & Android Responsive</h3>
+            <p>Native 100dvh viewport sizing with auto-scaling centerpiece and collision-free multi-line transcript scrolling on phones.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Original vs Plus Comparison Table -->
+  <section id="comparison">
+    <div class="container">
+      <div class="section-head">
+        <h2>Original Jarvis vs. J.A.R.V.I.S Plus</h2>
+        <p>A comprehensive side-by-side feature comparison showing architectural and usability upgrades.</p>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Feature / Dimension</th>
+              <th>Baseline Jarvis</th>
+              <th>J.A.R.V.I.S Plus</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><b>Holographic HUD Themes</b></td>
+              <td class="baseline-col">1 static theme (ironcore only)</td>
+              <td class="table-plus-highlight"><b>5 switchable themes</b> (Aetheria, IronCore, Zenith, Omni, Astra) with 1-click live swapping</td>
+            </tr>
+            <tr>
+              <td><b>Multilingual & RTL Support</b></td>
+              <td class="baseline-col">English only, strict LTR</td>
+              <td class="table-plus-highlight"><b>9 UI languages</b> with full RTL layout mirroring (Persian & Arabic) + isolated LTR telemetry</td>
+            </tr>
+            <tr>
+              <td><b>STT Language Selector</b></td>
+              <td class="baseline-col">Hardcoded in <code>.env</code> file</td>
+              <td class="table-plus-highlight"><b>Live on-the-fly selector</b> in HUD (14 languages + auto-detect)</td>
+            </tr>
+            <tr>
+              <td><b>Interruption & Barge-In</b></td>
+              <td class="baseline-col">Voice cannot stop tool runs</td>
+              <td class="table-plus-highlight"><b>Full-turn barge-in:</b> Say "Stop", wake-words, or press Space to halt background execution</td>
+            </tr>
+            <tr>
+              <td><b>LLM Thought Loops</b></td>
+              <td class="baseline-col">Speaks duplicate reasoning phrases</td>
+              <td class="table-plus-highlight"><b>Semantic deduplication:</b> Intermediate reasoning spoken at most once per turn</td>
+            </tr>
+            <tr>
+              <td><b>Whisper Noise Filtering</b></td>
+              <td class="baseline-col">Hallucinates on ambient silence ([Music], [Applause])</td>
+              <td class="table-plus-highlight"><b>Automatic hallucination filter</b> cleans silence artifacts and subtitle loops</td>
+            </tr>
+            <tr>
+              <td><b>Acoustic Echo Guard</b></td>
+              <td class="baseline-col">Mic captures speaker output</td>
+              <td class="table-plus-highlight"><b>Adaptive silence & speech gating</b> prevents agent self-talk loops</td>
+            </tr>
+            <tr>
+              <td><b>Mobile Layout</b></td>
+              <td class="baseline-col">Broken layout, buttons clipped on phones</td>
+              <td class="table-plus-highlight"><b>Mobile-first <code>100dvh</code></b> with dynamic scale & collision-free transcript drawer</td>
+            </tr>
+            <tr>
+              <td><b>TTS Engine Flexibility</b></td>
+              <td class="baseline-col">Proprietary paid TTS only</td>
+              <td class="table-plus-highlight"><b>100% Free Edge-TTS (native Persian Farid/Dilara) + Gemini TTS + ElevenLabs & Soniox paid</b></td>
+            </tr>
+            <tr>
+              <td><b>Diagnostic Inspector</b></td>
+              <td class="baseline-col">Raw terminal logs only</td>
+              <td class="table-plus-highlight"><b>Slide-over System Inspector</b> with real-time waveform, ping, mic calibration & metrics</td>
+            </tr>
+            <tr>
+              <td><b>Setup & Deployment</b></td>
+              <td class="baseline-col">Manual dependency configuration</td>
+              <td class="table-plus-highlight"><b>60-second <code>setup.sh</code></b> + turnkey Docker Compose with TLS certificate automation</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </section>

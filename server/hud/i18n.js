@@ -591,9 +591,18 @@
     },
 
     init() {
-      const savedLang = localStorage.getItem("jarvis_ui_lang");
-      if (savedLang && TRANSLATIONS[savedLang]) {
-        currentLang = savedLang;
+      const urlParams = new URLSearchParams(location.search);
+      const urlLang = urlParams.get("lang");
+      if (urlLang && TRANSLATIONS[urlLang]) {
+        currentLang = urlLang;
+        localStorage.setItem("jarvis_ui_lang", urlLang);
+      } else {
+        const savedLang = localStorage.getItem("jarvis_ui_lang");
+        if (savedLang && TRANSLATIONS[savedLang]) {
+          currentLang = savedLang;
+        } else {
+          currentLang = "en";
+        }
       }
       const savedStt = localStorage.getItem("jarvis_stt_lang");
       if (savedStt) {
