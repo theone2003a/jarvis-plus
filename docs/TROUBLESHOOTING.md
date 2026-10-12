@@ -1,80 +1,76 @@
-# Troubleshooting
+# J.A.R.V.I.S Plus — Troubleshooting & FAQ
 
-**HUD loads but mic is blocked** — you're on plain http or an untrusted cert.
-Browsers require a secure context for `getUserMedia`. Trust `certs/cert.pem`
-on the device (see SETUP §3) and use `https://`.
+This guide resolves common setup issues, browser audio permission quirks, network configurations, and model performance problems.
 
-**First connection after server start times out** — the Whisper model warms at
-startup (~40 s). `scripts/jarvis-health.sh` until all rows are OK.
+---
 
-**"Agent backend offline. Running in basic mode."** — the Hermes API server
-isn't reachable. Check `API_SERVER_ENABLED/KEY` in `~/.hermes/.env` and that
-`hermes gateway` is running; verify with `curl -H "Authorization: Bearer $KEY"
-http://127.0.0.1:8642/health`.
+## 1. Browser & Microphone Issues
 
-**Transcripts are wrong/garbled words** — make sure you're on the current HUD
-(hard refresh): mic must capture at 16 kHz natively. Upgrading `stt.model` to
-`small.en` helps. Loud rooms: get closer to the mic; echo cancellation is on.
+### HUD loads, but microphone is blocked / grayed out
+- **Root Cause**: Modern browsers (iOS Safari, Android Chrome, desktop Chrome) strictly enforce **Secure Contexts (`getUserMedia`)**. They will refuse to grant microphone permissions on unencrypted `http://` over a local network.
+- **Solution**:
+  1. Make sure you are using **`https://`** on port **`8766`** (e.g. `https://192.168.1.100:8766/hud/?token=...`).
+  2. On first visit, click **Advanced → Proceed** to accept the self-signed certificate.
+  3. On iOS Safari, tap the `aA` icon in the address bar → **Website Settings** → Set **Microphone** to **Allow**.
 
-**Replies show â€™ / â€œ style garbage** — you're running an old server.py;
-current code forces UTF-8 on the Hermes SSE stream.
+### Audio echo / Jarvis speaks to itself in a loop
+- **Root Cause**: Laptop speakers playing into an open built-in microphone without acoustic echo cancellation.
+- **Solution**:
+  1. In the HUD, open the **System Inspector** and increase the **VAD Threshold** slider (e.g. from `0.45` to `0.55`).
+  2. Wear headphones or reduce speaker volume slightly.
+  3. Ensure `audible_fillers: false` in `server.yaml` if room reflections are extreme.
 
-**401 everywhere / ACCESS CODE loop** — the token you entered doesn't match
-`JARVIS_HUD_TOKEN` in `~/.hermes/.env`. Clear the `jarvis_token` cookie and
-retry; restart the voice server after changing the env var.
+---
 
-**LaunchAgent exits with EX_CONFIG** — your log paths point at an external
-volume. Keep `StandardOutPath`/`StandardErrorPath` on the internal disk.
+## 2. Model & Pipeline Latency
 
-**LaunchAgent "running" but nothing listens, log empty** — TCC is blocking the
-process from your external drive: it hangs inside `getcwd()`/`open()`. Grant
-Full Disk Access to `Python.app` inside your Python framework (see the plist
-comments), and invoke the **venv** python directly — no `bash -c 'cd ...'`
-wrapper.
+### Speech-to-Text (STT) feels slow (~2-3 seconds)
+- **Root Cause**: You are running local Whisper on CPU instead of Groq Cloud LPU.
+- **Solution**:
+  1. Add a free Groq API key in `.env`: `GROQ_API_KEY=gsk_...`
+  2. In `server/config/server.yaml`, ensure `stt.provider: groq`.
+  3. Groq Whisper Large-V3 drops latency to **~300-350ms**.
 
-**Port 443 "address already in use" or permission denied** — bind `0.0.0.0`
-(macOS only exempts wildcard binds for non-root low ports) and make sure a
-previous instance fully released the port before restarting.
+### Whisper generates `[Music]` or strange repeated phrases
+- **Root Cause**: Ambient room silence triggering Whisper hallucinations.
+- **Solution**:
+  - J.A.R.V.I.S Plus includes an automatic hallucination scrubber. If custom audio artifacts persist, ensure `vad.trim_silence: true` in `server.yaml`.
 
-**ElevenLabs quota shows "chars today" instead of a quota bar** — give your
-API key the User → Read permission in the ElevenLabs dashboard.
+---
 
-**Stop button says stopped but Hermes kept working briefly** — on Hermes
-v0.16, session runs aren't registered in the runs store (`/stop` 404s); the
-halt works by dropping the SSE stream. Newer Hermes builds may fix this.
+## 3. Autonomous Agent & Tool Issues
 
-**"No clip timestamps found. Set 'vad_filter'..." error** — old build; current
-code treats silent/unintelligible audio as an empty transcript on both the
-local and GPU STT paths.
+### "Agent backend offline. Running in basic mode."
+- **Root Cause**: The voice pipeline cannot reach the local Nous Hermes Agent API.
+- **Solution**:
+  1. Verify Hermes gateway is running: `hermes gateway`.
+  2. Test health endpoint directly:
+     ```bash
+     curl -H "Authorization: Bearer $API_SERVER_KEY" http://127.0.0.1:8642/health
+     ```
+  3. If Hermes is not installed, J.A.R.V.I.S Plus automatically falls back to direct LLM mode using Google Gemini Flash or Anthropic.
 
-**GPU STT: "Library cublas64_12.dll is not found"** — the NVIDIA pip wheels
-aren't on the DLL search path. Use the shipped `worker/stt_server.py` (it
-resolves them via `sys.prefix`) and install `nvidia-cublas-cu12
-nvidia-cudnn-cu12` into the same venv.
+### 401 Unauthorized / Access Code Loop
+- **Root Cause**: The URL token does not match `JARVIS_HUD_TOKEN`.
+- **Solution**:
+  1. Check your token in `.env`: `grep JARVIS_HUD_TOKEN .env`
+  2. Clear browser cookies or localStorage for localhost.
+  3. Access with the exact query parameter: `?token=<YOUR-TOKEN>`.
 
-**HUD unreachable for ~15 s after a restart** — normal: launchd's respawn
-throttle. If it lasts longer, run `scripts/jarvis-health.sh` on the host.
+---
 
-**HTTPS dead but the plain ws port still answers** — two known causes, both
-fixed in current files but worth knowing: (1) file-descriptor exhaustion
-(launchd default is 256; the shipped plist raises it to 8192), and (2) an
-orphaned STT child process holding a port from a previous run, which makes the
-next spawn fail its first bind and silently cancel all the TLS listeners. Use
-`scripts/jarvis-stop.sh` — it kills by port ownership — never a bare pkill.
+## 4. Port & Network Binding
 
-**Slow page loads from Windows (10s+), instant by IP** — Windows mDNS is
-flaky with `.local` names. Add a hosts-file entry (admin):
-`<server-ip> jarvis.local jarvis` (give the server a DHCP reservation first).
+### Port 8766 / 8765 "Address already in use"
+- **Solution**:
+  Find and kill the zombie process:
+  ```bash
+  lsof -i :8766 -i :8765
+  kill -9 <PID>
+  ```
 
-**Agent replies are empty (content null, 0 input tokens)** — your LLM
-provider is out of quota/credits, not a bug here. Check the Hermes gateway
-log for 429/402 errors and configure a `fallback_providers` entry in Hermes'
-config.yaml.
-
-**Agent "shows" things in its own browser instead of the HUD** — install and
-enable the bundled `hermes-plugin/hud_display` (see SETUP). Prose
-instructions don't beat tool schemas; the plugin does.
-
-**Phone can't reach jarvis.local** — some Android versions lack mDNS; use the
-raw IP (and add it to `security.extra_origin_hosts` in server.yaml so the
-WebSocket origin check accepts it).
+### Cannot access HUD from mobile phone on the same Wi-Fi
+- **Checklist**:
+  1. Ensure both devices are on the exact same Wi-Fi subnet (disable cellular data temporarily).
+  2. Check host firewall (on macOS: System Settings → Network → Firewall → Allow incoming connections to Python).
+  3. Confirm server binds to `0.0.0.0` (all interfaces), not `127.0.0.1`.

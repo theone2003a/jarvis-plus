@@ -1,175 +1,110 @@
-# Full Setup Guide
+# J.A.R.V.I.S Plus — Installation & Deployment Guide
 
-Tested on macOS (Apple Silicon) with Hermes Agent v0.16. Allow ~1 hour.
+This guide walks you through setting up **J.A.R.V.I.S Plus** on your local machine, server, or Docker cluster.
 
-## 1. Hermes Agent (the brain)
+---
 
-Install Hermes Agent and give it an LLM provider — follow the
-[official quickstart](https://hermes-agent.nousresearch.com/docs/getting-started/quickstart).
-Verify `hermes` works in your terminal before continuing.
+## Prerequisites
+- **Operating System**: macOS (Apple Silicon or Intel), Linux (Ubuntu 20.04+, Debian, Arch), or Windows with WSL2.
+- **Python**: Version 3.10, 3.11, or 3.12 (Python 3.11 recommended).
+- **Docker**: Optional (recommended for turnkey containerized launch).
+- **Microphone**: Any built-in or USB microphone.
 
-Enable its API server in `~/.hermes/.env`:
+---
 
+## Option 1: Turnkey Docker Compose (Recommended)
+
+Docker Compose bundles all Python dependencies, FastAPI services, and TLS certificate tooling into a single container.
+
+### Step 1: Clone Repository
 ```bash
-API_SERVER_ENABLED=true
-API_SERVER_KEY=<long random secret>      # required — full toolset incl. terminal!
+git clone https://github.com/theone2003a/jarvis-plus.git
+cd jarvis-plus
 ```
 
-Start the gateway (`hermes gateway`) and verify:
-
+### Step 2: Run Setup Wizard
 ```bash
-KEY=$(grep '^API_SERVER_KEY=' ~/.hermes/.env | cut -d= -f2)
-curl -H "Authorization: Bearer $KEY" http://127.0.0.1:8642/health
-# {"status": "ok", ...}
+./setup.sh
+```
+*The wizard automatically:*
+1. Generates local self-signed TLS certificates in `server/certs/` for microphone permissions.
+2. Creates your `.env` configuration file with a secure random access token.
+3. Initializes `server/config/server.yaml`.
+
+### Step 3: Configure API Keys
+Edit `.env` with your preferred free or paid keys:
+```bash
+# Optional but recommended for fastest STT:
+GROQ_API_KEY=gsk_your_groq_api_key_here
+
+# Optional Google Gemini for free Brain:
+GEMINI_API_KEY=your_gemini_api_key_here
+```
+*(Note: Microsoft Edge-TTS works automatically with zero API keys!)*
+
+### Step 4: Launch Container
+```bash
+docker compose up -d
 ```
 
-Recommended: add voice-behavior rules to your global `~/.hermes/SOUL.md`
-(short spoken sentences, no markdown aloud, never speak secrets, announce risky
-actions and wait for approval). The agent — not the voice server — should own
-its personality.
+---
 
-## 2. ElevenLabs (the voice)
+## Option 2: Native Python 3.11 Setup
 
-Create an API key at elevenlabs.io and pick a voice from their library, noting
-its `voice_id`. Add to `~/.hermes/.env`:
+If you prefer running directly on your host operating system (recommended for direct hardware access on macOS M-series chips):
 
+### Step 1: Run Setup Wizard
 ```bash
-ELEVENLABS_API_KEY=...
+git clone https://github.com/theone2003a/jarvis-plus.git
+cd jarvis-plus
+./setup.sh
 ```
 
-For the HUD's quota bar, give the key the **User → Read** permission.
-
-## 3. The voice pipeline server (this repo)
-
+### Step 2: Install Virtual Environment & Dependencies
 ```bash
 cd server
 python3 -m venv .venv
-.venv/bin/pip install fastapi uvicorn requests pyyaml numpy anthropic \
-    RealtimeSTT faster-whisper silero-vad websockets psutil
-cp config/server.example.yaml config/server.yaml
+source .venv/bin/activate
+pip install -r ../requirements.txt
 ```
 
-Note: `faster-whisper` and `silero-vad` are REQUIRED — recent RealtimeSTT
-releases treat them as optional extras and fail at runtime without them
-(silently for VAD, loudly for the engine). The first start takes 60–90 s
-(torch import + model download); subsequent starts are faster.
-
-Edit `config/server.yaml`: set `voice.voice_id`, and adjust the `machines:`
-list (or delete it). The first run downloads the Whisper model (~460 MB for
-`small.en`).
-
-### TLS certificates (required for browser microphone)
-
-Browsers only expose the mic to secure origins:
-
+### Step 3: Launch Voice Server
 ```bash
-scripts/make-certs.sh            # auto-detects your LAN IP for the SAN
+python server.py
 ```
 
-Trust `certs/cert.pem` on each device (macOS: Keychain; Windows:
-`certutil -user -addstore Root cert.pem`; iPhone: download
-`https://host:8765/hud/jarvis.cer`, install profile, then enable in
-Settings → General → About → Certificate Trust Settings).
+---
 
-Optional but nice: rename your host's mDNS name (`sudo scutil --set
-LocalHostName jarvis` on macOS) so the HUD lives at `https://jarvis.local/hud/`.
-Port 443 needs the wildcard bind already set in the example config.
+## Connecting to Hermes Agent (The Autonomous Brain)
 
-### HUD access token
+To unlock autonomous tools (terminal execution, web research, file editing, 80+ skills):
 
-```bash
-echo "JARVIS_HUD_TOKEN=jarvis-$(python3 -c 'import secrets;print(secrets.token_hex(3))')" >> ~/.hermes/.env
-```
+1. Install Nous Hermes Agent:
+   Follow the [official Hermes Agent installation guide](https://hermes-agent.nousresearch.com/docs/getting-started/quickstart).
+2. Enable the API server in your Hermes configuration (`~/.hermes/.env`):
+   ```bash
+   API_SERVER_ENABLED=true
+   API_SERVER_KEY=your_long_random_secret_token
+   ```
+3. Start the gateway:
+   ```bash
+   hermes gateway
+   ```
+4. Update `jarvis-plus/.env`:
+   ```bash
+   API_SERVER_ENABLED=true
+   API_SERVER_KEY=your_long_random_secret_token
+   ```
 
-The HUD asks for this once per device. Omit the variable entirely to disable
-auth (not recommended).
+---
 
-### Boot greeting (one-time, ~110 ElevenLabs characters)
+## Accessing the Holographic HUD
 
-```bash
-scripts/make-boot-audio.sh YourFirstName
-```
+Once running, the server prints your local and LAN URLs:
 
-### Run it
+* **Local Machine**:  
+  👉 **`https://localhost:8766/hud/?token=<YOUR-TOKEN>`**
+* **Phone / LAN Tablet**:  
+  👉 **`https://<YOUR-LAN-IP>:8766/hud/?token=<YOUR-TOKEN>`**
 
-```bash
-.venv/bin/python server.py
-```
-
-Wait ~40 s for the STT model to warm, then open `https://YOUR_HOST/hud/`.
-Run `scripts/jarvis-health.sh` to check all five services.
-
-## 4. Auto-start on boot (macOS)
-
-Copy the two plists from `launchd/`, edit the `/PATH/TO` and `YOUR_USER`
-placeholders, then:
-
-```bash
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jarvis.voice.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jarvis.dashboard.plist
-```
-
-**Read the comments in the plists** — there are two macOS traps (external-drive
-TCC permissions and log-path location) that produce silent hangs or `EX_CONFIG`
-errors if ignored. Day-to-day management: `scripts/jarvis-{start,stop,restart,health}.sh`.
-
-## 5. Optional extras
-
-**Push-to-talk client** (Windows/Linux box with a mic):
-
-```bash
-cd client
-python -m venv .venv && .venv/Scripts/pip install sounddevice websockets numpy openwakeword
-python client.py --push-to-talk --server ws://YOUR_HOST:8765/ws --list-devices
-```
-
-**GPU worker stats** (shows in the Machines panel): copy
-`worker/worker_stats.py` to the worker machine, `pip install psutil`, run it,
-and point a `machines:` entry's `stats_url` at `http://worker-ip:8767/stats`.
-
-**GPU speech recognition** — the single biggest quality upgrade if you own any
-NVIDIA machine on the LAN. On that machine:
-
-```
-cd worker
-python -m venv .venv
-.venv/Scripts/pip install faster-whisper fastapi uvicorn nvidia-cublas-cu12 nvidia-cudnn-cu12
-copy run-stt.example.bat run-stt.bat    # fill in your JARVIS_HUD_TOKEN value
-run-stt.bat
-```
-
-Then uncomment the `stt.remote:` block in the server's `server.yaml` (point
-`url` at the GPU machine) and restart the voice server. Result: `large-v3-turbo`
-accuracy at ~0.2 s per utterance, with automatic fallback to the local model
-whenever the GPU machine is off. For auto-start at Windows logon, drop a
-`JarvisSTT.vbs` in `shell:startup` (template in the .bat comments).
-
-**Phone app feel**: open the HUD in Safari/Chrome on your phone →
-Share → Add to Home Screen.
-
-**Let the agent put things on your screen** (the showstopper): install the
-bundled Hermes plugin so "show me a video of X on screen" makes holographic
-media panels materialize on every open HUD:
-
-```bash
-cp -R hermes-plugin/hud_display ~/.hermes/plugins/hud_display
-# edit ~/.hermes/plugins/hud_display/schemas.py: replace YOUR_HOST
-hermes plugins enable hud_display     # repeat with -p <profile> if you use profiles
-# restart your hermes gateway
-```
-
-The plugin needs `JARVIS_HUD_TOKEN` in `~/.hermes/.env` (same token as the
-HUD). Directory name must stay a valid Python module name — hyphens silently
-break plugin discovery. The agent then has `hud_display` / `hud_dismiss`
-tools; YouTube links play as embedded video, `position` left/right lets it
-fly in multiple panels from different vectors.
-
-## 6. Verify everything
-
-```bash
-scripts/jarvis-health.sh   # all five rows OK
-scripts/jarvis-smoke.sh    # synthesized voice turn through the full stack (macOS)
-```
-
-Then the real test: click the ring and ask "what's in your memory file?" —
-a real agent answers with real file contents.
+> ⚠️ **First-Time Browser Note**: Because the TLS certificate is self-signed, modern browsers will display a security alert. Click **Advanced → Proceed to localhost** to allow microphone access.

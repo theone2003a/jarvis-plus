@@ -26,6 +26,21 @@ Talk to a **real autonomous agent** — one with persistent long-term memory, sh
 
 ---
 
+## 📚 Complete Documentation Library
+
+| Guide | Description |
+| :--- | :--- |
+| **[Product & Features (docs/FEATURES.md)](docs/FEATURES.md)** | Deep-dive into voice barge-in, thought deduplication, and hallucination filtering. |
+| **[HUD Holographic Interfaces (docs/HUD_TEMPLATES.md)](docs/HUD_TEMPLATES.md)** | Visual guide and customization for the 5 HUD themes + Mobile. |
+| **[Models & Providers Matrix (docs/MODELS_AND_PROVIDERS.md)](docs/MODELS_AND_PROVIDERS.md)** | Full guide for Free, Cloud, and Paid providers (Edge-TTS, Gemini, Groq, ElevenLabs, Ollama). |
+| **[Multilingual & RTL Engine (docs/MULTILINGUAL_I18N.md)](docs/MULTILINGUAL_I18N.md)** | 9 UI languages, RTL layout rules, and dynamic 14-language Whisper STT. |
+| **[System Architecture (docs/ARCHITECTURE.md)](docs/ARCHITECTURE.md)** | Real-time WebSocket protocol frames, Silero VAD state machine, and Sessions API. |
+| **[Installation & Setup (docs/SETUP.md)](docs/SETUP.md)** | 60-second automated wizard, Turnkey Docker Compose, and native guides. |
+| **[Troubleshooting & FAQ (docs/TROUBLESHOOTING.md)](docs/TROUBLESHOOTING.md)** | Resolving mobile microphone permission, acoustic loop handling, and latency. |
+| **[Machine Instructions for AI (AGENTS.md)](AGENTS.md)** | Machine-readable instructions for Claude Code, Cursor, Windsurf, OpenHands, and Aider. |
+
+---
+
 ## 🌟 Key Features
 
 * **5 Switchable HUD Holographic Interfaces** (1-Click switch without reloading):
