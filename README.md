@@ -6,6 +6,7 @@
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white" alt="Docker Ready">
   <img src="https://img.shields.io/badge/Languages-9%20(RTL%20%2B%20LTR)-06b6d4.svg" alt="9 Languages with RTL">
   <img src="https://img.shields.io/badge/HUD%20Themes-5%20Switchable-a855f7.svg" alt="5 Switchable HUD Themes">
+  <a href="AGENTS.md"><img src="https://img.shields.io/badge/AI%20Agents-AGENTS.md%20Ready-10b981.svg" alt="AGENTS.md Ready"></a>
   <a href="https://theone2003a.github.io/jarvis-plus/"><img src="https://img.shields.io/badge/Website-Interactive%20Showcase-ec4899.svg" alt="Showcase Website"></a>
 </p>
 
