@@ -6,14 +6,14 @@
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white" alt="Docker Ready">
   <img src="https://img.shields.io/badge/Languages-9%20(RTL%20%2B%20LTR)-06b6d4.svg" alt="9 Languages with RTL">
   <img src="https://img.shields.io/badge/HUD%20Themes-5%20Switchable-a855f7.svg" alt="5 Switchable HUD Themes">
-  <a href="https://theone2003s.github.io/jarvis-plus/"><img src="https://img.shields.io/badge/Website-Interactive%20Showcase-ec4899.svg" alt="Showcase Website"></a>
+  <a href="https://theone2003a.github.io/jarvis-plus/"><img src="https://img.shields.io/badge/Website-Interactive%20Showcase-ec4899.svg" alt="Showcase Website"></a>
 </p>
 
 A self-hosted, Iron-Man-style autonomous voice assistant and command center built on top of [Hermes Agent](https://github.com/NousResearch/hermes-agent) (Nous Research's open-source autonomous agent). 
 
 Talk to a **real autonomous agent** — one with persistent long-term memory, shell terminal execution, web search, file tools, and 80+ skills — through a futuristic glowing holographic HUD in any browser on your LAN, or a mobile client.
 
-🌐 **Interactive Project Website & Showcase**: **[https://theone2003s.github.io/jarvis-plus/](https://theone2003s.github.io/jarvis-plus/)**
+🌐 **Interactive Project Website & Showcase**: **[https://theone2003a.github.io/jarvis-plus/](https://theone2003a.github.io/jarvis-plus/)**
 
 ---
 
@@ -64,7 +64,7 @@ J.A.R.V.I.S Plus is engineered to be **100% accessible out of the box with zero 
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/theone2003s/jarvis-plus.git
+git clone https://github.com/theone2003a/jarvis-plus.git
 cd jarvis-plus
 
 # 2. Run automated setup wizard (generates TLS certs & .env)
@@ -78,7 +78,7 @@ docker compose up -d
 
 ```bash
 # 1. Clone and enter directory
-git clone https://github.com/theone2003s/jarvis-plus.git
+git clone https://github.com/theone2003a/jarvis-plus.git
 cd jarvis-plus
 
 # 2. Run setup wizard
