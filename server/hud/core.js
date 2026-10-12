@@ -74,7 +74,7 @@
       this.emit("state", { state: st, label: resolvedLabel, hint: resolvedHint });
     },
 
-    sttLanguage: localStorage.getItem("jarvis_stt_lang") || "fa",
+    sttLanguage: localStorage.getItem("jarvis_stt_lang") || "auto",
 
     setSttLanguage(code) {
       this.sttLanguage = code;

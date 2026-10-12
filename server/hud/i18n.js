@@ -521,7 +521,7 @@
   ];
 
   let currentLang = localStorage.getItem("jarvis_ui_lang") || "en";
-  let currentSttLang = localStorage.getItem("jarvis_stt_lang") || "fa";
+  let currentSttLang = localStorage.getItem("jarvis_stt_lang") || "auto";
 
   const I18n = {
     TRANSLATIONS,
