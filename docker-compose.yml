@@ -1,0 +1,23 @@
+services:
+  jarvis-plus:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: jarvis-plus:latest
+    container_name: jarvis-plus
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    volumes:
+      - ./server/config:/app/server/config
+      - ./server/certs:/app/server/certs
+      - ./server/logs:/app/server/logs
+    healthcheck:
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:8766/hud/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
